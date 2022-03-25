@@ -14,6 +14,7 @@ pub const SESSION_ID_BYTES: usize = 16;
 pub const STEP1_PACKET_BYTES: usize = 16 + 32;
 pub const STEP2_PACKET_BYTES: usize = 32;
 pub const SHARED_KEY_BYTES: usize = 32;
+pub const EC_SCALAR_BYTES: usize = 32;
 
 const DSI1: &str = "CPaceRistretto255-1";
 const DSI2: &str = "CPaceRistretto255-2";
@@ -45,9 +46,9 @@ pub struct SharedKeys {
 
 #[derive(Debug, Clone)]
 pub struct CPace {
-    session_id: [u8; SESSION_ID_BYTES],
-    p: RistrettoPoint,
-    r: Scalar,
+    pub session_id: [u8; SESSION_ID_BYTES],
+    pub p: RistrettoPoint,
+    pub r: Scalar,
 }
 
 pub struct Step1Out {
@@ -58,6 +59,10 @@ pub struct Step1Out {
 impl Step1Out {
     pub fn packet(&self) -> [u8; STEP1_PACKET_BYTES] {
         self.step1_packet
+    }
+
+    pub fn scalar(&self) -> [u8; EC_SCALAR_BYTES] {
+        self.ctx.r.to_bytes()
     }
 
     pub fn step3(&self, step2_packet: &[u8; STEP2_PACKET_BYTES]) -> Result<SharedKeys, Error> {
@@ -179,6 +184,37 @@ impl CPace {
             .decompress()
             .ok_or(Error::InvalidPublicKey)?;
         self.finalize(yb, self.p, yb)
+    }
+
+    pub fn step3_stateless(
+        step2_packet: &[u8; STEP2_PACKET_BYTES],
+        scalar: &[u8; EC_SCALAR_BYTES],
+        ya_bytes: &[u8; STEP2_PACKET_BYTES],
+    ) -> Result<SharedKeys, Error> {
+        let ya = CompressedRistretto::from_slice(ya_bytes)
+            .decompress()
+            .ok_or(Error::InvalidPublicKey)?;
+        let yb = CompressedRistretto::from_slice(step2_packet)
+            .decompress()
+            .ok_or(Error::InvalidPublicKey)?;
+
+        let op = yb;
+        if op.is_identity() {
+            return Err(Error::InvalidPublicKey);
+        }
+        let r = Scalar::from_bytes_mod_order(*scalar);
+
+        let p = op * r;
+        let mut st = Hash::new();
+        st.update(DSI2);
+        st.update(p.compress().as_bytes());
+        st.update(ya.compress().as_bytes());
+        st.update(yb.compress().as_bytes());
+        let h = st.finalize();
+        let (mut k1, mut k2) = ([0u8; SHARED_KEY_BYTES], [0u8; SHARED_KEY_BYTES]);
+        k1.copy_from_slice(&h[..SHARED_KEY_BYTES]);
+        k2.copy_from_slice(&h[SHARED_KEY_BYTES..]);
+        Ok(SharedKeys { k1, k2 })
     }
 }
 
