@@ -8,7 +8,7 @@ use curve25519_dalek::{
     traits::IsIdentity,
 };
 use getrandom::getrandom;
-use hmac_sha512::{Hash, BLOCKBYTES};
+use hmac_sha512::{Hash, BLOCKBYTES, BYTES as SHA512_BYTES};
 
 pub const SESSION_ID_BYTES: usize = 16;
 pub const STEP1_PACKET_BYTES: usize = 16 + 32;
@@ -49,6 +49,7 @@ pub struct CPace {
     pub session_id: [u8; SESSION_ID_BYTES],
     pub p: RistrettoPoint,
     pub r: Scalar,
+    pub h: [u8; SHA512_BYTES],
 }
 
 pub struct Step1Out {
@@ -86,7 +87,7 @@ impl Step2Out {
 }
 
 impl CPace {
-    fn new<T: AsRef<[u8]>>(
+    pub fn new<T: AsRef<[u8]>>(
         session_id: [u8; SESSION_ID_BYTES],
         password: &str,
         id_a: &str,
@@ -117,7 +118,7 @@ impl CPace {
         getrandom(&mut r)?;
         let r = Scalar::from_bytes_mod_order_wide(&r);
         p *= r;
-        Ok(CPace { session_id, p, r })
+        Ok(CPace { session_id, p, r, h })
     }
 
     fn finalize(

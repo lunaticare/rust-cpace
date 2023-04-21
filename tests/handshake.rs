@@ -1,4 +1,6 @@
+use hex;
 use pake_cpace::CPace;
+use std::str;
 
 #[test]
 fn test_cpace() {
@@ -59,3 +61,19 @@ const tc_ISK_SY: [u8; 64] = [
     0x44, 0x54, 0xd7, 0x64, 0xad, 0x8e, 0xd8, 0x60, 0x7c, 0x15, 0x8e, 0xf6, 0x62, 0x61, 0x45, 0x67,
 ];
 
+#[test]
+fn test_isk_calculation_initiator_responder() {
+    let dsi = "CPaceRistretto255";
+    let result = CPace::new(
+        tc_sid,
+        str::from_utf8(&tc_PRS).expect("fail tc_PRS"),
+        "\ninitiator",
+        "\nresponder",
+        Some(tc_ADa),
+        dsi,
+    )
+    .expect("fail");
+    assert_eq!(
+        hex::encode(&result.h),
+        "a5ce446f63a1ae6d1fee80fa67d0b4004a4b1283ec5549a462bf33a6c1ae06a0871f9bf48545f49b2a792eed255ac04f52758c9c60448306810b44e986e3dcbb");
+}
