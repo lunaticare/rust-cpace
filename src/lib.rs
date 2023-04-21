@@ -92,6 +92,7 @@ impl CPace {
         id_a: &str,
         id_b: &str,
         ad: Option<T>,
+        dsi: &str,
     ) -> Result<Self, Error> {
         if id_a.len() > 0xff || id_b.len() > 0xff {
             return Err(Error::Overflow(
@@ -99,9 +100,9 @@ impl CPace {
             ));
         }
         let zpad = [0u8; BLOCKBYTES];
-        let pad_len = zpad.len().wrapping_sub(DSI1.len() + password.len()) & (zpad.len() - 1);
+        let pad_len = zpad.len().wrapping_sub(dsi.len() + password.len()) & (zpad.len() - 1);
         let mut st = Hash::new();
-        st.update(DSI1);
+        st.update(dsi);
         st.update(password);
         st.update(&zpad[..pad_len]);
         st.update(session_id);
@@ -149,7 +150,7 @@ impl CPace {
     ) -> Result<Step1Out, Error> {
         let mut session_id = [0u8; SESSION_ID_BYTES];
         getrandom(&mut session_id)?;
-        let ctx = CPace::new(session_id, password, id_a, id_b, ad)?;
+        let ctx = CPace::new(session_id, password, id_a, id_b, ad, DSI1)?;
         let mut step1_packet = [0u8; STEP1_PACKET_BYTES];
         step1_packet[..SESSION_ID_BYTES].copy_from_slice(&ctx.session_id);
         step1_packet[SESSION_ID_BYTES..].copy_from_slice(ctx.p.compress().as_bytes());
@@ -166,7 +167,7 @@ impl CPace {
         let mut session_id = [0u8; SESSION_ID_BYTES];
         session_id.copy_from_slice(&step1_packet[..SESSION_ID_BYTES]);
         let ya = &step1_packet[SESSION_ID_BYTES..];
-        let ctx = CPace::new(session_id, password, id_a, id_b, ad)?;
+        let ctx = CPace::new(session_id, password, id_a, id_b, ad, DSI1)?;
         let mut step2_packet = [0u8; STEP2_PACKET_BYTES];
         step2_packet.copy_from_slice(ctx.p.compress().as_bytes());
         let ya = CompressedRistretto::from_slice(ya)
