@@ -90,14 +90,13 @@ impl CPace {
     pub fn new<T: AsRef<[u8]>>(
         session_id: [u8; SESSION_ID_BYTES],
         password: &str,
-        id_a: &str,
-        id_b: &str,
+        ci: &str,
         ad: Option<T>,
         dsi: &str,
     ) -> Result<Self, Error> {
-        if id_a.len() > 0xff || id_b.len() > 0xff {
+        if ci.len() > 0x1ff {
             return Err(Error::Overflow(
-                "Identifiers must be at most 255 bytes long",
+                "Channel identifier must be at most 511 bytes long",
             ));
         }
         let zpad = [0u8; BLOCKBYTES];
@@ -107,10 +106,8 @@ impl CPace {
         st.update(password);
         st.update(&zpad[..pad_len]);
         st.update(session_id);
-        st.update([id_a.len() as u8]);
-        st.update(id_a);
-        st.update([id_b.len() as u8]);
-        st.update(id_b);
+        st.update([ci.len() as u8]);
+        st.update(ci);
         st.update(ad.as_ref().map(|ad| ad.as_ref()).unwrap_or_default());
         let h = st.finalize();
         let mut p = RistrettoPoint::from_uniform_bytes(&h);
@@ -145,13 +142,12 @@ impl CPace {
 
     pub fn step1<T: AsRef<[u8]>>(
         password: &str,
-        id_a: &str,
-        id_b: &str,
+        ci: &str,
         ad: Option<T>,
     ) -> Result<Step1Out, Error> {
         let mut session_id = [0u8; SESSION_ID_BYTES];
         getrandom(&mut session_id)?;
-        let ctx = CPace::new(session_id, password, id_a, id_b, ad, DSI1)?;
+        let ctx = CPace::new(session_id, password, ci, ad, DSI1)?;
         let mut step1_packet = [0u8; STEP1_PACKET_BYTES];
         step1_packet[..SESSION_ID_BYTES].copy_from_slice(&ctx.session_id);
         step1_packet[SESSION_ID_BYTES..].copy_from_slice(ctx.p.compress().as_bytes());
@@ -161,14 +157,13 @@ impl CPace {
     pub fn step2<T: AsRef<[u8]>>(
         step1_packet: &[u8; STEP1_PACKET_BYTES],
         password: &str,
-        id_a: &str,
-        id_b: &str,
+        ci: &str,
         ad: Option<T>,
     ) -> Result<Step2Out, Error> {
         let mut session_id = [0u8; SESSION_ID_BYTES];
         session_id.copy_from_slice(&step1_packet[..SESSION_ID_BYTES]);
         let ya = &step1_packet[SESSION_ID_BYTES..];
-        let ctx = CPace::new(session_id, password, id_a, id_b, ad, DSI1)?;
+        let ctx = CPace::new(session_id, password, ci, ad, DSI1)?;
         let mut step2_packet = [0u8; STEP2_PACKET_BYTES];
         step2_packet.copy_from_slice(ctx.p.compress().as_bytes());
         let ya = CompressedRistretto::from_slice(ya)

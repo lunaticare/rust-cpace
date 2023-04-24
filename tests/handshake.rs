@@ -4,9 +4,12 @@ use std::str;
 
 #[test]
 fn test_cpace() {
-    let client = CPace::step1("password", "client", "server", Some("ad")).unwrap();
+    let id_a = "client";
+    let id_b = "server";
+    let ci = format!("{}{}", id_a, id_b).as_str().to_owned();
+    let client = CPace::step1("password", &ci, Some("ad")).unwrap();
 
-    let step2 = CPace::step2(&client.packet(), "password", "client", "server", Some("ad")).unwrap();
+    let step2 = CPace::step2(&client.packet(), "password", &ci, Some("ad")).unwrap();
 
     let shared_keys = client.step3(&step2.packet()).unwrap();
 
@@ -67,8 +70,7 @@ fn test_isk_calculation_initiator_responder() {
     let result = CPace::new(
         tc_sid,
         str::from_utf8(&tc_PRS).expect("fail tc_PRS"),
-        "\ninitiator",
-        "\nresponder",
+        "\nAinitiator\nBresponder",
         Some(tc_ADa),
         dsi,
     )
