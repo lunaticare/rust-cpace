@@ -1,36 +1,40 @@
-use hmac_sha512::Hash;
+use core::cmp;
+use hmac_sha512::{Hash, BLOCKBYTES};
 
-pub fn prepend_len_closure<T: AsRef<[u8]>, F>(update: &mut F, input: T)
+pub fn prepend_len_closure<T: AsRef<[u8]>, F>(update: &mut F, input: T) -> usize
 where
     F: FnMut(&[u8]) -> (),
 {
     let input = input.as_ref();
     let mut length = input.len();
+    let mut len = length;
     loop {
         if length < 128 {
             update(&[length as u8]);
         } else {
             update(&[((length & 0x7f) + 0x80) as u8]);
         }
+        len += 1;
         length = length >> 7;
         if length == 0 {
             break;
         }
     }
     update(input);
+    return len;
 }
 
-pub fn prepend_len_hash<T: AsRef<[u8]>>(hash: &mut Hash, input: &T) {
-    prepend_len_closure(&mut |i| hash.update(i), input);
+pub fn prepend_len_hash<T: AsRef<[u8]>>(hash: &mut Hash, input: &T) -> usize {
+    return prepend_len_closure(&mut |i| hash.update(i), input);
 }
 
-pub fn prepend_len_vec<T: AsRef<[u8]>>(v: &mut Vec<u8>, input: &T) {
-    prepend_len_closure(&mut |i| vec_push(v, i), input);
+pub fn prepend_len_vec<T: AsRef<[u8]>>(v: &mut Vec<u8>, input: &T) -> usize {
+    return prepend_len_closure(&mut |i| vec_push(v, i), input);
 }
 
-pub fn prepend_len_hash_vec<T: AsRef<[u8]>>(hash: &mut Hash, v: &mut Vec<u8>, input: &T) {
+pub fn prepend_len_hash_vec<T: AsRef<[u8]>>(hash: &mut Hash, v: &mut Vec<u8>, input: &T) -> usize {
     prepend_len_hash(hash, input);
-    prepend_len_vec(v, input);
+    return prepend_len_vec(v, input);
 }
 
 pub fn vec_push<T: AsRef<[u8]>>(v: &mut Vec<u8>, b: T) {
@@ -38,4 +42,25 @@ pub fn vec_push<T: AsRef<[u8]>>(v: &mut Vec<u8>, b: T) {
     for n in 0..b_ref.len() {
         v.push(b_ref[n]);
     }
+}
+
+pub fn generator_string<T: AsRef<[u8]>>(
+    dsi: &str,
+    prs: &T,
+    ci: &T,
+    sid: &[u8],
+    hash: &mut Hash,
+    v: &mut Vec<u8>,
+) {
+    let mut prepend_len = |i: &dyn AsRef<[u8]>| prepend_len_hash_vec(hash, v, &i.as_ref());
+
+    let mut header_len = 0;
+    header_len += prepend_len(&dsi);
+    header_len += prepend_len(&prs);
+    let zpad = [0u8; BLOCKBYTES];
+    let pad_len = cmp::max(0, zpad.len() - header_len - 1);
+
+    prepend_len(&&zpad[..pad_len]);
+    prepend_len(&ci);
+    prepend_len(&sid);
 }

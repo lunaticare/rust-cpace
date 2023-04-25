@@ -4,15 +4,13 @@
 pub mod util;
 
 use core::fmt;
-use core::cmp;
 use curve25519_dalek::{
     ristretto::{CompressedRistretto, RistrettoPoint},
     scalar::Scalar,
     traits::IsIdentity,
 };
 use getrandom::getrandom;
-use hmac_sha512::{Hash, BLOCKBYTES, BYTES as SHA512_BYTES};
-use util::prepend_len_hash_vec;
+use hmac_sha512::{Hash, BYTES as SHA512_BYTES};
 
 pub const SESSION_ID_BYTES: usize = 16;
 pub const STEP1_PACKET_BYTES: usize = 16 + 32;
@@ -104,18 +102,9 @@ impl CPace {
                 "Channel identifier must be at most 511 bytes long",
             ));
         }
-        let zpad = [0u8; BLOCKBYTES];
-        let pad_len = cmp::max(0, zpad.len() -(dsi.len() + 1 /* dsi len pad for length < 128 */) - (password.len() + 1 /* password len pad for length < 128 */) - 1);
         let mut st = Hash::new();
         let mut gen: Vec<u8> = Vec::new();
-        let mut prepend_len = |i: &dyn AsRef<[u8]>| prepend_len_hash_vec(&mut st, &mut gen, &i.as_ref());
-
-        // prepend_len_hash_vec(&mut st, &mut gen, &dsi);
-        prepend_len(&dsi);
-        prepend_len(&password);
-        prepend_len(&&zpad[..pad_len]);
-        prepend_len(&ci);
-        prepend_len(&session_id);
+        util::generator_string(&dsi, &password, &ci, &session_id, &mut st, &mut gen);
         // st.update([ad.as_ref().map(|s | s.as_ref().len()).unwrap_or(0) as u8]);
         // gen.push(ad.as_ref().map(|s | s.as_ref().len()).unwrap_or(0) as u8);
 

@@ -68,7 +68,7 @@ const tc_ISK_SY: [u8; 64] = [
 ];
 
 #[test]
-fn test_isk_calculation_initiator_responder() {
+fn test_calculate_generator() {
     let dsi = "CPaceRistretto255";
     let result = CPace::new::<&str>(
         tc_sid,
@@ -92,6 +92,10 @@ fn test_isk_calculation_initiator_responder() {
     assert_eq!(
         hex::encode(&result.h),
         "a5ce446f63a1ae6d1fee80fa67d0b4004a4b1283ec5549a462bf33a6c1ae06a0871f9bf48545f49b2a792eed255ac04f52758c9c60448306810b44e986e3dcbb");
+    // assert_eq!(
+    //     hex::encode(&result.p.compress().as_bytes()),
+    //     "9c5712178570957204d89ac11acbef789dd076992ba361429acb2bc38c71d14c"
+    // );
 }
 
 mock! {
