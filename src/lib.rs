@@ -1,6 +1,8 @@
 // #![no_std] // @nocommit
 #![forbid(unsafe_code)]
 
+pub mod util;
+
 use core::fmt;
 use core::cmp;
 use curve25519_dalek::{
@@ -10,8 +12,7 @@ use curve25519_dalek::{
 };
 use getrandom::getrandom;
 use hmac_sha512::{Hash, BLOCKBYTES, BYTES as SHA512_BYTES};
-
-mod util;
+use util::prepend_len_hash_vec;
 
 pub const SESSION_ID_BYTES: usize = 16;
 pub const STEP1_PACKET_BYTES: usize = 16 + 32;
@@ -107,36 +108,14 @@ impl CPace {
         let pad_len = cmp::max(0, zpad.len() -(dsi.len() + 1 /* dsi len pad for length < 128 */) - (password.len() + 1 /* password len pad for length < 128 */) - 1);
         let mut st = Hash::new();
         let mut gen: Vec<u8> = Vec::new();
-        st.update([dsi.len() as u8]);
-        gen.push(dsi.len() as u8);
+        let mut prepend_len = |i: &dyn AsRef<[u8]>| prepend_len_hash_vec(&mut st, &mut gen, &i.as_ref());
 
-        st.update(dsi);
-        CPace::push(&mut gen, &dsi);
-
-        st.update([password.len() as u8]);
-        gen.push(password.len() as u8);
-
-        st.update(password);
-        CPace::push(&mut gen, &password);
-
-        st.update([pad_len as u8]);
-        gen.push(pad_len as u8);
-
-        st.update(&zpad[..pad_len]);
-        CPace::push(&mut gen, &zpad[..pad_len]);
-
-        st.update([ci.len() as u8]);
-        gen.push(ci.len() as u8);
-
-        st.update(ci);
-        CPace::push(&mut gen, &ci);
-
-        st.update([session_id.len() as u8]);
-        gen.push(session_id.len() as u8);
-
-        st.update(session_id);
-        CPace::push(&mut gen, &session_id);
-
+        // prepend_len_hash_vec(&mut st, &mut gen, &dsi);
+        prepend_len(&dsi);
+        prepend_len(&password);
+        prepend_len(&&zpad[..pad_len]);
+        prepend_len(&ci);
+        prepend_len(&session_id);
         // st.update([ad.as_ref().map(|s | s.as_ref().len()).unwrap_or(0) as u8]);
         // gen.push(ad.as_ref().map(|s | s.as_ref().len()).unwrap_or(0) as u8);
 
@@ -156,13 +135,6 @@ impl CPace {
             h,
             generator: gen,
         })
-    }
-
-    fn push<T: AsRef<[u8]>>(v: &mut Vec<u8>, b: T) {
-        let b_ref = b.as_ref();
-        for n in 0..b_ref.len() {
-            v.push(b_ref[n]);
-        }
     }
 
     fn finalize(
