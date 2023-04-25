@@ -1,4 +1,7 @@
 use hex;
+use hmac_sha512::{Hash, BLOCKBYTES, BYTES as SHA512_BYTES};
+use mockall::predicate::*;
+use mockall::*;
 use pake_cpace::CPace;
 use std::{iter::FromIterator, str};
 
@@ -90,3 +93,23 @@ fn test_isk_calculation_initiator_responder() {
         hex::encode(&result.h),
         "a5ce446f63a1ae6d1fee80fa67d0b4004a4b1283ec5549a462bf33a6c1ae06a0871f9bf48545f49b2a792eed255ac04f52758c9c60448306810b44e986e3dcbb");
 }
+
+mock! {
+    Hash {}
+}
+
+// #[test]
+// fn test_isk_calculation_initiator_responder_generator() {
+//     let dsi = "CPaceRistretto255";
+//     let result = CPace::new(
+//         tc_sid,
+//         str::from_utf8(&tc_PRS).expect("fail tc_PRS"),
+//         "\nAinitiator\nBresponder",
+//         Some(tc_ADa),
+//         dsi,
+//     )
+//     .expect("fail");
+//     assert_eq!(
+//         hex::encode(&result.h),
+//         "a5ce446f63a1ae6d1fee80fa67d0b4004a4b1283ec5549a462bf33a6c1ae06a0871f9bf48545f49b2a792eed255ac04f52758c9c60448306810b44e986e3dcbb");
+// }
