@@ -1,4 +1,4 @@
-use curve25519_dalek::ristretto::RistrettoPoint;
+use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use hex;
 use hmac_sha512::{Hash, BLOCKBYTES, BYTES as SHA512_BYTES};
 use mockall::predicate::*;
@@ -102,6 +102,38 @@ fn test_calculate_generator() {
     // );
 }
 
+// https://github.com/cfrg/draft-irtf-cfrg-voprf/blob/3a651b9f148953ddedbd2a120f6c0b092b41c0d9/poc/ristretto_decaf.sage#L387-L400
+#[test]
+fn test_ietf_voprf_spec_1() {
+    let input = hex::decode("5d1be09e3d0c82fc538112490e35701979d99e06ca3e2b5b54bffe8b4dc772c14d98b696a1bbfb5ca32c436cc61c16563790306c79eaca7705668b47dffe5bb6").expect("fail");
+    let mut fixed_size_input = [0u8; 64];
+    fixed_size_input.copy_from_slice(&input);
+    let p1 = RistrettoPoint::from_uniform_bytes(&fixed_size_input);
+    let p2 = CompressedRistretto::from_slice(
+        hex::decode("3066f82a1a747d45120d1740f14358531a8f04bbffe6a819f86dfe50f44a0a46")
+            .expect("fail")
+            .as_slice(),
+    )
+    .decompress()
+    .expect("fail");
+    assert_eq!(p1, p2);
+}
+
+#[test]
+fn test_ietf_voprf_spec_2() {
+    let input = hex::decode("165d697a1ef3d5cf3c38565beefcf88c0f282b8e7dbd28544c483432f1cec7675debea8ebb4e5fe7d6f6e5db15f15587ac4d4d4a1de7191e0c1ca6664abcc413").expect("fail");
+    let mut fixed_size_input = [0u8; 64];
+    fixed_size_input.copy_from_slice(&input);
+    let p1 = RistrettoPoint::from_uniform_bytes(&fixed_size_input);
+    let p2 = CompressedRistretto::from_slice(
+        hex::decode("ae81e7dedf20a497e10c304a765c1767a42d6e06029758d2d7e8ef7cc4c41179")
+            .expect("fail")
+            .as_slice(),
+    )
+    .decompress()
+    .expect("fail");
+    assert_eq!(p1, p2);
+}
 mock! {
     Hash {}
 }
