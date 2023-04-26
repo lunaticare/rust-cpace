@@ -24,3 +24,4 @@ opt-level = 3
 [dev-dependencies]
 hex = "0.4.3"
 mockall = "0.11.4"
+hmac-sha512 = { features = ["traits09", "traits010"]}
