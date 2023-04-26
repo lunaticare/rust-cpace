@@ -93,13 +93,11 @@ fn test_calculate_generator() {
     assert_eq!(
         hex::encode(&result.h),
         "a5ce446f63a1ae6d1fee80fa67d0b4004a4b1283ec5549a462bf33a6c1ae06a0871f9bf48545f49b2a792eed255ac04f52758c9c60448306810b44e986e3dcbb");
-    
-    // Fails, likely because Elligator 2 isn't supported by `curve25519-dalek` library
-    // https://github.com/dalek-cryptography/curve25519-dalek/blob/4583c472f53c912dbc50466b8cae222a3c582176/src/ristretto.rs#L642-L643
-    // assert_eq!(
-    //     hex::encode(RistrettoPoint::from_uniform_bytes(&result.h).compress().as_bytes()),
-    //     "9c5712178570957204d89ac11acbef789dd076992ba361429acb2bc38c71d14c"
-    // );
+
+    assert_eq!(
+        hex::encode(RistrettoPoint::from_uniform_bytes(&result.h).compress().as_bytes()),
+        "5e25411ca1ad7c9debfd0b33ad987a95cefef2d3f15dcc8bd26415a5dfe2e15a"
+    );
 }
 
 // https://github.com/cfrg/draft-irtf-cfrg-voprf/blob/3a651b9f148953ddedbd2a120f6c0b092b41c0d9/poc/ristretto_decaf.sage#L387-L400
@@ -134,22 +132,18 @@ fn test_ietf_voprf_spec_2() {
     .expect("fail");
     assert_eq!(p1, p2);
 }
+
+#[test]
+fn test_decode_compressed_ristretto_point_from_test_case() {
+    let encoded_generator_g = "9c5712178570957204d89ac11acbef789dd076992ba361429acb2bc38c71d14c";
+    let x = hex::decode(encoded_generator_g).expect("fail");
+    println!("x = {:#?}", x);
+    let cp = CompressedRistretto::from_slice(x.as_slice());
+    println!("cp = {:#?}", cp);
+    let rp = cp.decompress().expect("fail to decompress");
+    println!("rp = {:#?}", rp);
+}
+
 mock! {
     Hash {}
 }
-
-// #[test]
-// fn test_isk_calculation_initiator_responder_generator() {
-//     let dsi = "CPaceRistretto255";
-//     let result = CPace::new(
-//         tc_sid,
-//         str::from_utf8(&tc_PRS).expect("fail tc_PRS"),
-//         "\nAinitiator\nBresponder",
-//         Some(tc_ADa),
-//         dsi,
-//     )
-//     .expect("fail");
-//     assert_eq!(
-//         hex::encode(&result.h),
-//         "a5ce446f63a1ae6d1fee80fa67d0b4004a4b1283ec5549a462bf33a6c1ae06a0871f9bf48545f49b2a792eed255ac04f52758c9c60448306810b44e986e3dcbb");
-// }
