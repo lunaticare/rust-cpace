@@ -7,7 +7,7 @@ use pake_cpace::{CPace, DSI};
 use std::{iter::FromIterator, str};
 
 mod test_util;
-use test_util::{g, y_a, y_b};
+use test_util::{g, y_a, y_b, AD_A, AD_B};
 
 const CI: &str = "\nAinitiator\nBresponder";
 const PASSWORD: &str = "Password";
@@ -22,9 +22,11 @@ fn test_cpace() {
     let ci = format!("{}{}", id_a, id_b).as_str().to_owned();
     let client = CPace::step1("password", &ci, Some("ad")).unwrap();
 
-    let step2 = CPace::step2(&client.packet(), "password", &ci, Some("ad")).unwrap();
+    let step2 = CPace::step2(&client.packet(), "password", &ci, Some(AD_A), Some(AD_B)).unwrap();
 
-    let shared_keys = client.step3(&step2.packet()).unwrap();
+    let shared_keys = client
+        .step3(&step2.packet(), Some(AD_A), Some(AD_B))
+        .unwrap();
 
     assert_eq!(shared_keys.k1, step2.shared_keys().k1);
     assert_eq!(shared_keys.k2, step2.shared_keys().k2);
@@ -104,24 +106,29 @@ fn test_decode_compressed_ristretto_point_from_test_case() {
 fn test_isk_calculation_initiator_responder() {
     let step1 =
         CPace::step1_debug(PASSWORD, CI, None::<&str>, SESSION_ID, &mut || Ok(y_a())).unwrap();
-    let step2 = CPace::step2_debug(&step1.packet(), PASSWORD, CI, None::<&str>, &mut || {
-        Ok(y_b())
-    })
+    let step2 = CPace::step2_debug(
+        &step1.packet(),
+        PASSWORD,
+        CI,
+        Some(AD_A),
+        Some(AD_B),
+        &mut || Ok(y_b()),
+    )
     .unwrap();
-    let step3 = step1.step3(&step2.packet());
+    let step3 = step1.step3(&step2.packet(), Some(AD_A), Some(AD_B));
     let shared_keys = step3.unwrap();
 
     assert_eq!(shared_keys.k1, step2.shared_keys().k1);
     assert_eq!(shared_keys.k2, step2.shared_keys().k2);
 
-    // assert_eq!(
-    //     String::from_iter([hex::encode(shared_keys.k1), hex::encode(shared_keys.k2)]),
-    //     String::from_iter([
-    //         "e91ccb2c0f5e0d0993a33956e3be59754f3f2b07db57631f5394452e",
-    //         "a2e7b4354674eb1f5686c078462bf83bec72e8743df440108e638f35",
-    //         "26d9b90e85be096f",
-    //     ])
-    // );
+    assert_eq!(
+        String::from_iter([hex::encode(shared_keys.k1), hex::encode(shared_keys.k2)]),
+        String::from_iter([
+            "e91ccb2c0f5e0d0993a33956e3be59754f3f2b07db57631f5394452e",
+            "a2e7b4354674eb1f5686c078462bf83bec72e8743df440108e638f35",
+            "26d9b90e85be096f",
+        ])
+    );
 }
 
 mock! {

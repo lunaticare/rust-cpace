@@ -6,6 +6,9 @@ use curve25519_dalek::{
 };
 use pake_cpace::util::{calc_ycapital, msg, prepend_len_vec, scalar_mult_vfy};
 
+pub const AD_A: &str = "ADa";
+pub const AD_B: &str = "ADb";
+
 pub fn y_a() -> Scalar {
     scalar_from_bytes_mod_order_wide_hex_string(&String::from_iter([
         "da3d23700a9e5699258aef94dc060dfda5ebb61f02a5ea77fad53f4f",
@@ -130,8 +133,7 @@ fn test_calc_ycapital_2() {
 
 #[test]
 fn test_msg_1() {
-    let ad_a = "ADa";
-    let msg_a_actual = hex::encode(msg(&ycapital_a(), &ad_a));
+    let msg_a_actual = hex::encode(msg(&ycapital_a(), &AD_A));
     let msg_a_expected = String::from_iter([
         "20383a85dd236978f17f8c8545b50dabc52a39fcdab2cf8bc531ce04",
         "0ff77ca82d03414461",
@@ -141,8 +143,7 @@ fn test_msg_1() {
 
 #[test]
 fn test_msg_2() {
-    let ad_b = "ADb";
-    let msg_b_actual = hex::encode(msg(&ycapital_b(), &ad_b));
+    let msg_b_actual = hex::encode(msg(&ycapital_b(), &AD_B));
     let msg_b_expected = String::from_iter([
         "20a6206309c0e8e5f579295e35997ac4300ab3fecec3c17f7b604f3e",
         "698fa1383c03414462",

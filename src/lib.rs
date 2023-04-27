@@ -11,9 +11,7 @@ use curve25519_dalek::{
 };
 use getrandom::getrandom;
 use hmac_sha512::{Hash, BYTES as SHA512_BYTES};
-use util::{
-    calc_ycapital, generator_string, prefix_free_cat_hash_vec, sample_scalar, scalar_mult_vfy,
-};
+use util::{calc_ycapital, generator_string, prepend_len_hash_vec, sample_scalar, scalar_mult_vfy};
 
 pub const SESSION_ID_BYTES: usize = 16;
 pub const STEP1_PACKET_BYTES: usize = 16 + 32;
@@ -72,8 +70,13 @@ impl Step1Out {
         self.ctx.r.to_bytes()
     }
 
-    pub fn step3(&self, step2_packet: &[u8; STEP2_PACKET_BYTES]) -> Result<SharedKeys, Error> {
-        self.ctx.step3(step2_packet)
+    pub fn step3<T: AsRef<[u8]>>(
+        &self,
+        step2_packet: &[u8; STEP2_PACKET_BYTES],
+        ad_a: Option<T>,
+        ad_b: Option<T>,
+    ) -> Result<SharedKeys, Error> {
+        self.ctx.step3(step2_packet, ad_a, ad_b)
     }
 }
 
@@ -125,11 +128,13 @@ impl CPace {
         })
     }
 
-    fn finalize(
+    fn finalize<T: AsRef<[u8]>>(
         &self,
         op: RistrettoPoint,
-        ya: RistrettoPoint,
-        yb: RistrettoPoint,
+        ycapital_a: RistrettoPoint,
+        ycapital_b: RistrettoPoint,
+        ad_a: Option<T>,
+        ad_b: Option<T>,
     ) -> Result<SharedKeys, Error> {
         if op.is_identity() {
             return Err(Error::InvalidPublicKey);
@@ -141,13 +146,15 @@ impl CPace {
         let k = k.unwrap();
         let mut gen: Vec<u8> = Vec::new();
         let mut st = Hash::new();
-        let mut prefix_free_cat =
-            |i: &dyn AsRef<[u8]>| prefix_free_cat_hash_vec(&mut st, &mut gen, &i.as_ref());
-        prefix_free_cat(&DSI_ISK);
-        prefix_free_cat(&self.session_id);
-        prefix_free_cat(k.compress().as_bytes());
-        prefix_free_cat(ya.compress().as_bytes());
-        prefix_free_cat(yb.compress().as_bytes());
+        let mut prepend_len =
+            |i: &dyn AsRef<[u8]>| prepend_len_hash_vec(&mut st, &mut gen, &i.as_ref());
+        prepend_len(&DSI_ISK);
+        prepend_len(&self.session_id);
+        prepend_len(k.compress().as_bytes());
+        prepend_len(ycapital_a.compress().as_bytes());
+        ad_a.map(|ad| prepend_len(&ad));
+        prepend_len(ycapital_b.compress().as_bytes());
+        ad_b.map(|ad| prepend_len(&ad));
         let h = st.finalize();
         let (mut k1, mut k2) = ([0u8; SHARED_KEY_BYTES], [0u8; SHARED_KEY_BYTES]);
         k1.copy_from_slice(&h[..SHARED_KEY_BYTES]);
@@ -186,16 +193,20 @@ impl CPace {
         step1_packet: &[u8; STEP1_PACKET_BYTES],
         password: &str,
         ci: &str,
-        ad: Option<T>,
+        ad_a: Option<T>,
+        ad_b: Option<T>,
     ) -> Result<Step2Out, Error> {
-        return CPace::step2_debug(step1_packet, password, ci, ad, &mut || sample_scalar());
+        return CPace::step2_debug(step1_packet, password, ci, ad_a, ad_b, &mut || {
+            sample_scalar()
+        });
     }
 
     pub fn step2_debug<T: AsRef<[u8]>, RandomScalarGenerator>(
         step1_packet: &[u8; STEP1_PACKET_BYTES],
         password: &str,
         ci: &str,
-        ad: Option<T>,
+        ad_a: Option<T>,
+        ad_b: Option<T>,
         rsg: &mut RandomScalarGenerator,
     ) -> Result<Step2Out, Error>
     where
@@ -211,24 +222,31 @@ impl CPace {
         let ya = CompressedRistretto::from_slice(ya)
             .decompress()
             .ok_or(Error::InvalidPublicKey)?;
-        let shared_keys = ctx.finalize(ya, ya, ctx.p)?;
+        let shared_keys = ctx.finalize(ya, ya, ctx.p, ad_a, ad_b)?;
         Ok(Step2Out {
             shared_keys,
             step2_packet,
         })
     }
 
-    pub fn step3(&self, step2_packet: &[u8; STEP2_PACKET_BYTES]) -> Result<SharedKeys, Error> {
+    pub fn step3<T: AsRef<[u8]>>(
+        &self,
+        step2_packet: &[u8; STEP2_PACKET_BYTES],
+        ad_a: Option<T>,
+        ad_b: Option<T>,
+    ) -> Result<SharedKeys, Error> {
         let yb = CompressedRistretto::from_slice(step2_packet)
             .decompress()
             .ok_or(Error::InvalidPublicKey)?;
-        self.finalize(yb, self.p, yb)
+        self.finalize(yb, self.p, yb, ad_a, ad_b)
     }
 
-    pub fn step3_stateless(
+    pub fn step3_stateless<T: AsRef<[u8]>>(
         step2_packet: &[u8; STEP2_PACKET_BYTES],
         scalar: &[u8; EC_SCALAR_BYTES],
         ya_bytes: &[u8; STEP2_PACKET_BYTES],
+        ad_a: Option<T>,
+        ad_b: Option<T>,
     ) -> Result<SharedKeys, Error> {
         let ya = CompressedRistretto::from_slice(ya_bytes)
             .decompress()
