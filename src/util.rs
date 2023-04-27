@@ -46,6 +46,11 @@ pub fn prepend_len_hash_vec<T: AsRef<[u8]>>(hash: &mut Hash, v: &mut Vec<u8>, in
     return prepend_len_vec(v, input);
 }
 
+pub fn prefix_free_cat_hash_vec<T: AsRef<[u8]>>(hash: &mut Hash, v: &mut Vec<u8>, input: &T) {
+    hash.update(input);
+    vec_push(v, input);
+}
+
 pub fn vec_push<T: AsRef<[u8]>>(v: &mut Vec<u8>, b: T) {
     let b_ref = b.as_ref();
     for n in 0..b_ref.len() {

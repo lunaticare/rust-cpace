@@ -11,7 +11,9 @@ use curve25519_dalek::{
 };
 use getrandom::getrandom;
 use hmac_sha512::{Hash, BYTES as SHA512_BYTES};
-use util::{calc_ycapital, sample_scalar};
+use util::{
+    calc_ycapital, prefix_free_cat_hash_vec, sample_scalar, scalar_mult_vfy,
+};
 
 pub const SESSION_ID_BYTES: usize = 16;
 pub const STEP1_PACKET_BYTES: usize = 16 + 32;
@@ -19,8 +21,8 @@ pub const STEP2_PACKET_BYTES: usize = 32;
 pub const SHARED_KEY_BYTES: usize = 32;
 pub const EC_SCALAR_BYTES: usize = 32;
 
-const DSI1: &str = "CPaceRistretto255-1";
-const DSI2: &str = "CPaceRistretto255-2";
+const DSI: &str = "CPaceRistretto255";
+const DSI_ISK: &str = "CPaceRistretto255_ISK";
 
 #[derive(Debug)]
 pub enum Error {
@@ -134,12 +136,20 @@ impl CPace {
         if op.is_identity() {
             return Err(Error::InvalidPublicKey);
         }
-        let p = op * self.r;
+        let k = scalar_mult_vfy(&self.r, &op);
+        if k.is_err() {
+            return Err(k.unwrap_err());
+        }
+        let k = k.unwrap();
+        let mut gen: Vec<u8> = Vec::new();
         let mut st = Hash::new();
-        st.update(DSI2);
-        st.update(p.compress().as_bytes());
-        st.update(ya.compress().as_bytes());
-        st.update(yb.compress().as_bytes());
+        let mut prefix_free_cat =
+            |i: &dyn AsRef<[u8]>| prefix_free_cat_hash_vec(&mut st, &mut gen, &i.as_ref());
+        prefix_free_cat(&DSI_ISK);
+        prefix_free_cat(&self.session_id);
+        prefix_free_cat(k.compress().as_bytes());
+        prefix_free_cat(ya.compress().as_bytes());
+        prefix_free_cat(yb.compress().as_bytes());
         let h = st.finalize();
         let (mut k1, mut k2) = ([0u8; SHARED_KEY_BYTES], [0u8; SHARED_KEY_BYTES]);
         k1.copy_from_slice(&h[..SHARED_KEY_BYTES]);
@@ -154,7 +164,7 @@ impl CPace {
     ) -> Result<Step1Out, Error> {
         let mut session_id = [0u8; SESSION_ID_BYTES];
         getrandom(&mut session_id)?;
-        let ctx = CPace::new(session_id, password, ci, ad, DSI1)?;
+        let ctx = CPace::new(session_id, password, ci, ad, DSI)?;
         let mut step1_packet = [0u8; STEP1_PACKET_BYTES];
         step1_packet[..SESSION_ID_BYTES].copy_from_slice(&ctx.session_id);
         step1_packet[SESSION_ID_BYTES..].copy_from_slice(ctx.p.compress().as_bytes());
@@ -167,10 +177,11 @@ impl CPace {
         ci: &str,
         ad: Option<T>,
     ) -> Result<Step2Out, Error> {
+        // TODO validate step1_packet (correct length encodings)
         let mut session_id = [0u8; SESSION_ID_BYTES];
         session_id.copy_from_slice(&step1_packet[..SESSION_ID_BYTES]);
         let ya = &step1_packet[SESSION_ID_BYTES..];
-        let ctx = CPace::new(session_id, password, ci, ad, DSI1)?;
+        let ctx = CPace::new(session_id, password, ci, ad, DSI)?;
         let mut step2_packet = [0u8; STEP2_PACKET_BYTES];
         step2_packet.copy_from_slice(ctx.p.compress().as_bytes());
         let ya = CompressedRistretto::from_slice(ya)
@@ -210,7 +221,7 @@ impl CPace {
 
         let p = op * r;
         let mut st = Hash::new();
-        st.update(DSI2);
+        st.update(DSI_ISK);
         st.update(p.compress().as_bytes());
         st.update(ya.compress().as_bytes());
         st.update(yb.compress().as_bytes());
