@@ -6,38 +6,66 @@ use curve25519_dalek::{
 };
 use pake_cpace::util::{calc_ycapital, msg, prepend_len_vec, scalar_mult_vfy};
 
-fn y_a() -> Scalar {
+pub fn y_a() -> Scalar {
     scalar_from_bytes_mod_order_wide_hex_string(&String::from_iter([
         "da3d23700a9e5699258aef94dc060dfda5ebb61f02a5ea77fad53f4f",
         "f0976d08",
     ]))
 }
 
-fn g() -> RistrettoPoint {
+pub fn g() -> RistrettoPoint {
     ristretto_point_from_compressed_encoding_hex_string(
         "5e25411ca1ad7c9debfd0b33ad987a95cefef2d3f15dcc8bd26415a5dfe2e15a",
     )
 }
 
-fn ycapital_a() -> RistrettoPoint {
+pub fn ycapital_a() -> RistrettoPoint {
     ristretto_point_from_compressed_encoding_hex_string(&String::from_iter([
         "383a85dd236978f17f8c8545b50dabc52a39fcdab2cf8bc531ce040f",
         "f77ca82d",
     ]))
 }
 
-fn ycapital_b() -> RistrettoPoint {
+pub fn ycapital_b() -> RistrettoPoint {
     ristretto_point_from_compressed_encoding_hex_string(&String::from_iter([
         "a6206309c0e8e5f579295e35997ac4300ab3fecec3c17f7b604f3e69",
         "8fa1383c",
     ]))
 }
 
-fn y_b() -> Scalar {
+pub fn y_b() -> Scalar {
     scalar_from_bytes_mod_order_wide_hex_string(&String::from_iter([
         "d2316b454718c35362d83d69df6320f38578ed5984651435e2949762",
         "d900b80d",
     ]))
+}
+
+pub fn k() -> RistrettoPoint {
+    return ristretto_point_from_compressed_encoding_hex_string(&String::from_iter([
+        "fa1d0318864e2cacb26875f1b791c9ae83204fe8359addb53e95a2e9",
+        "8893853f",
+    ]));
+}
+
+fn ristretto_point_from_uniform_bytes_hex_string(s: &str) -> RistrettoPoint {
+    let input = hex::decode(s).expect("fail");
+    let mut fixed_size_input = [0u8; 64];
+    fixed_size_input.copy_from_slice(&input);
+    return RistrettoPoint::from_uniform_bytes(&fixed_size_input);
+}
+
+fn ristretto_point_from_compressed_encoding_hex_string(s: &str) -> RistrettoPoint {
+    let input = hex::decode(s).expect("fail");
+    return CompressedRistretto::from_slice(input.as_slice())
+        .decompress()
+        .expect("fail");
+}
+
+fn scalar_from_bytes_mod_order_wide_hex_string(s: &str) -> Scalar {
+    let input = hex::decode(s).expect("fail");
+    let mut fixed_size_input = [0u8; 32];
+    fixed_size_input.copy_from_slice(&input);
+    return Scalar::from_bits(fixed_size_input);
 }
 
 #[test]
@@ -130,32 +158,4 @@ fn test_scalar_mult_vfy_1() {
 #[test]
 fn test_scalar_mult_vfy_2() {
     assert_eq!(scalar_mult_vfy(&y_b(), &ycapital_a()).expect("fail"), k());
-}
-
-fn k() -> RistrettoPoint {
-    return ristretto_point_from_compressed_encoding_hex_string(&String::from_iter([
-        "fa1d0318864e2cacb26875f1b791c9ae83204fe8359addb53e95a2e9",
-        "8893853f",
-    ]));
-}
-
-fn ristretto_point_from_uniform_bytes_hex_string(s: &str) -> RistrettoPoint {
-    let input = hex::decode(s).expect("fail");
-    let mut fixed_size_input = [0u8; 64];
-    fixed_size_input.copy_from_slice(&input);
-    return RistrettoPoint::from_uniform_bytes(&fixed_size_input);
-}
-
-fn ristretto_point_from_compressed_encoding_hex_string(s: &str) -> RistrettoPoint {
-    let input = hex::decode(s).expect("fail");
-    return CompressedRistretto::from_slice(input.as_slice())
-        .decompress()
-        .expect("fail");
-}
-
-fn scalar_from_bytes_mod_order_wide_hex_string(s: &str) -> Scalar {
-    let input = hex::decode(s).expect("fail");
-    let mut fixed_size_input = [0u8; 32];
-    fixed_size_input.copy_from_slice(&input);
-    return Scalar::from_bits(fixed_size_input);
 }

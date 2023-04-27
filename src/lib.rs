@@ -12,7 +12,7 @@ use curve25519_dalek::{
 use getrandom::getrandom;
 use hmac_sha512::{Hash, BYTES as SHA512_BYTES};
 use util::{
-    calc_ycapital, prefix_free_cat_hash_vec, sample_scalar, scalar_mult_vfy,
+    calc_ycapital, generator_string, prefix_free_cat_hash_vec, sample_scalar, scalar_mult_vfy,
 };
 
 pub const SESSION_ID_BYTES: usize = 16;
@@ -21,8 +21,8 @@ pub const STEP2_PACKET_BYTES: usize = 32;
 pub const SHARED_KEY_BYTES: usize = 32;
 pub const EC_SCALAR_BYTES: usize = 32;
 
-const DSI: &str = "CPaceRistretto255";
-const DSI_ISK: &str = "CPaceRistretto255_ISK";
+pub const DSI: &str = "CPaceRistretto255";
+pub const DSI_ISK: &str = "CPaceRistretto255_ISK";
 
 #[derive(Debug)]
 pub enum Error {
@@ -93,13 +93,16 @@ impl Step2Out {
 }
 
 impl CPace {
-    pub fn new<T: AsRef<[u8]>>(
+    pub fn new<RandomScalarGenerator>(
         session_id: [u8; SESSION_ID_BYTES],
         password: &str,
         ci: &str,
-        ad: Option<T>,
         dsi: &str,
-    ) -> Result<Self, Error> {
+        rsg: &mut RandomScalarGenerator,
+    ) -> Result<Self, Error>
+    where
+        RandomScalarGenerator: FnMut() -> Result<Scalar, getrandom::Error>,
+    {
         if ci.len() > 0x1ff {
             return Err(Error::Overflow(
                 "Channel identifier must be at most 511 bytes long",
@@ -107,16 +110,11 @@ impl CPace {
         }
         let mut st = Hash::new();
         let mut gen: Vec<u8> = Vec::new();
-        util::generator_string(&dsi, &password, &ci, &session_id, &mut st, &mut gen);
-        // st.update([ad.as_ref().map(|s | s.as_ref().len()).unwrap_or(0) as u8]);
-        // gen.push(ad.as_ref().map(|s | s.as_ref().len()).unwrap_or(0) as u8);
-
-        // st.update(ad.as_ref().map(|ad| ad.as_ref()).unwrap_or_default());
-        // CPace::push(&mut gen, ad.as_ref().map(|ad| ad.as_ref()).unwrap_or_default());
+        generator_string(&dsi, &password, &ci, &session_id, &mut st, &mut gen);
 
         let h = st.finalize();
         let mut p = RistrettoPoint::from_uniform_bytes(&h);
-        let r = sample_scalar()?;
+        let r = rsg()?;
         p = calc_ycapital(&r, &p);
         Ok(CPace {
             session_id,
@@ -164,7 +162,20 @@ impl CPace {
     ) -> Result<Step1Out, Error> {
         let mut session_id = [0u8; SESSION_ID_BYTES];
         getrandom(&mut session_id)?;
-        let ctx = CPace::new(session_id, password, ci, ad, DSI)?;
+        return CPace::step1_debug(password, ci, ad, session_id, &mut || sample_scalar());
+    }
+
+    pub fn step1_debug<T: AsRef<[u8]>, RandomScalarGenerator>(
+        password: &str,
+        ci: &str,
+        ad: Option<T>,
+        session_id: [u8; SESSION_ID_BYTES],
+        rsg: &mut RandomScalarGenerator,
+    ) -> Result<Step1Out, Error>
+    where
+        RandomScalarGenerator: FnMut() -> Result<Scalar, getrandom::Error>,
+    {
+        let ctx = CPace::new(session_id, password, ci, DSI, rsg)?;
         let mut step1_packet = [0u8; STEP1_PACKET_BYTES];
         step1_packet[..SESSION_ID_BYTES].copy_from_slice(&ctx.session_id);
         step1_packet[SESSION_ID_BYTES..].copy_from_slice(ctx.p.compress().as_bytes());
@@ -177,11 +188,24 @@ impl CPace {
         ci: &str,
         ad: Option<T>,
     ) -> Result<Step2Out, Error> {
+        return CPace::step2_debug(step1_packet, password, ci, ad, &mut || sample_scalar());
+    }
+
+    pub fn step2_debug<T: AsRef<[u8]>, RandomScalarGenerator>(
+        step1_packet: &[u8; STEP1_PACKET_BYTES],
+        password: &str,
+        ci: &str,
+        ad: Option<T>,
+        rsg: &mut RandomScalarGenerator,
+    ) -> Result<Step2Out, Error>
+    where
+        RandomScalarGenerator: FnMut() -> Result<Scalar, getrandom::Error>,
+    {
         // TODO validate step1_packet (correct length encodings)
         let mut session_id = [0u8; SESSION_ID_BYTES];
         session_id.copy_from_slice(&step1_packet[..SESSION_ID_BYTES]);
         let ya = &step1_packet[SESSION_ID_BYTES..];
-        let ctx = CPace::new(session_id, password, ci, ad, DSI)?;
+        let ctx = CPace::new(session_id, password, ci, DSI, rsg)?;
         let mut step2_packet = [0u8; STEP2_PACKET_BYTES];
         step2_packet.copy_from_slice(ctx.p.compress().as_bytes());
         let ya = CompressedRistretto::from_slice(ya)
