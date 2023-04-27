@@ -15,6 +15,7 @@ readme = "README.md"
 curve25519-dalek = "3.0"
 getrandom = { version = "0.2", default-features = false }
 hmac-sha512 = "1.1.4"
+smallvec = "1.10.0"
 
 [profile.release]
 lto = true

@@ -4,7 +4,7 @@ use curve25519_dalek::{
     ristretto::{CompressedRistretto, RistrettoPoint},
     scalar::Scalar,
 };
-use pake_cpace::util::{calc_ycapital, prepend_len_vec};
+use pake_cpace::util::{calc_ycapital, msg, prepend_len_vec};
 
 #[test]
 fn test_prepend_len_1() {
@@ -84,6 +84,36 @@ fn test_calc_ycapital_2() {
         "a6206309c0e8e5f579295e35997ac4300ab3fecec3c17f7b604f3e69",
         "8fa1383c",
     ]));
+    assert_eq!(r_expected, r_actual);
+}
+
+#[test]
+fn test_msg_1() {
+    let ad = "ADa";
+    let y = ristretto_point_from_compressed_encoding_hex_string(&String::from_iter([
+        "383a85dd236978f17f8c8545b50dabc52a39fcdab2cf8bc531ce040f",
+        "f77ca82d",
+    ]));
+    let r_actual = hex::encode(msg(&y, &ad));
+    let r_expected = String::from_iter([
+        "20383a85dd236978f17f8c8545b50dabc52a39fcdab2cf8bc531ce04",
+        "0ff77ca82d03414461",
+    ]);
+    assert_eq!(r_expected, r_actual);
+}
+
+#[test]
+fn test_msg_2() {
+    let ad = "ADb";
+    let y = ristretto_point_from_compressed_encoding_hex_string(&String::from_iter([
+        "a6206309c0e8e5f579295e35997ac4300ab3fecec3c17f7b604f3e69",
+        "8fa1383c",
+    ]));
+    let r_actual = hex::encode(msg(&y, &ad));
+    let r_expected = String::from_iter([
+        "20a6206309c0e8e5f579295e35997ac4300ab3fecec3c17f7b604f3e",
+        "698fa1383c03414462",
+    ]);
     assert_eq!(r_expected, r_actual);
 }
 

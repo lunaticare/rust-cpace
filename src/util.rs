@@ -2,6 +2,7 @@ use core::cmp;
 use curve25519_dalek::{ristretto::RistrettoPoint, scalar::Scalar};
 use getrandom::getrandom;
 use hmac_sha512::{Hash, BLOCKBYTES};
+use smallvec::SmallVec;
 
 pub fn prepend_len_closure<T: AsRef<[u8]>, F>(update: &mut F, input: T) -> usize
 where
@@ -34,12 +35,23 @@ pub fn prepend_len_vec<T: AsRef<[u8]>>(v: &mut Vec<u8>, input: &T) -> usize {
     return prepend_len_closure(&mut |i| vec_push(v, i), input);
 }
 
+pub fn prepend_len_smallvec<T: AsRef<[u8]>>(v: &mut SmallVec<[u8; 8]>, input: &T) -> usize {
+    return prepend_len_closure(&mut |i| smallvec_push(v, i), input);
+}
+
 pub fn prepend_len_hash_vec<T: AsRef<[u8]>>(hash: &mut Hash, v: &mut Vec<u8>, input: &T) -> usize {
     prepend_len_hash(hash, input);
     return prepend_len_vec(v, input);
 }
 
 pub fn vec_push<T: AsRef<[u8]>>(v: &mut Vec<u8>, b: T) {
+    let b_ref = b.as_ref();
+    for n in 0..b_ref.len() {
+        v.push(b_ref[n]);
+    }
+}
+
+pub fn smallvec_push<T: AsRef<[u8]>>(v: &mut SmallVec<[u8; 8]>, b: T) {
     let b_ref = b.as_ref();
     for n in 0..b_ref.len() {
         v.push(b_ref[n]);
@@ -76,3 +88,9 @@ pub fn calc_ycapital(y: &Scalar, g: &RistrettoPoint) -> RistrettoPoint {
     return g * y;
 }
 
+pub fn msg<T: AsRef<[u8]>>(y: &RistrettoPoint, ad: &T) -> SmallVec<[u8; 8]> {
+    let mut r = SmallVec::<[u8; 8]>::new();
+    prepend_len_smallvec(&mut r, y.compress().as_bytes());
+    prepend_len_smallvec(&mut r, ad);
+    return r;
+}
