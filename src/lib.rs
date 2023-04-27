@@ -11,6 +11,7 @@ use curve25519_dalek::{
 };
 use getrandom::getrandom;
 use hmac_sha512::{Hash, BYTES as SHA512_BYTES};
+use util::{calc_ycapital, sample_scalar};
 
 pub const SESSION_ID_BYTES: usize = 16;
 pub const STEP1_PACKET_BYTES: usize = 16 + 32;
@@ -113,10 +114,8 @@ impl CPace {
 
         let h = st.finalize();
         let mut p = RistrettoPoint::from_uniform_bytes(&h);
-        let mut r = [0u8; 64];
-        getrandom(&mut r)?;
-        let r = Scalar::from_bytes_mod_order_wide(&r);
-        p *= r;
+        let r = sample_scalar()?;
+        p = calc_ycapital(&r, &p);
         Ok(CPace {
             session_id,
             p,

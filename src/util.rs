@@ -1,4 +1,6 @@
 use core::cmp;
+use curve25519_dalek::{ristretto::RistrettoPoint, scalar::Scalar};
+use getrandom::getrandom;
 use hmac_sha512::{Hash, BLOCKBYTES};
 
 pub fn prepend_len_closure<T: AsRef<[u8]>, F>(update: &mut F, input: T) -> usize
@@ -64,3 +66,13 @@ pub fn generator_string<T: AsRef<[u8]>>(
     prepend_len(&ci);
     prepend_len(&sid);
 }
+
+pub fn sample_scalar() -> Result<Scalar, getrandom::Error> {
+    let mut r = [0u8; 64];
+    return getrandom(&mut r).map(|_| Scalar::from_bytes_mod_order_wide(&r));
+}
+
+pub fn calc_ycapital(y: &Scalar, g: &RistrettoPoint) -> RistrettoPoint {
+    return g * y;
+}
+
