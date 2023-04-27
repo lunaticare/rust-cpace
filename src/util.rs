@@ -4,6 +4,8 @@ use getrandom::getrandom;
 use hmac_sha512::{Hash, BLOCKBYTES};
 use smallvec::SmallVec;
 
+use crate::Error;
+
 pub fn prepend_len_closure<T: AsRef<[u8]>, F>(update: &mut F, input: T) -> usize
 where
     F: FnMut(&[u8]) -> (),
@@ -93,4 +95,14 @@ pub fn msg<T: AsRef<[u8]>>(y: &RistrettoPoint, ad: &T) -> SmallVec<[u8; 8]> {
     prepend_len_smallvec(&mut r, y.compress().as_bytes());
     prepend_len_smallvec(&mut r, ad);
     return r;
+}
+
+pub fn scalar_mult_vfy(y: &Scalar, g: &RistrettoPoint) -> Result<RistrettoPoint, crate::Error> {
+    let r = g * y;
+    let is_valid = true; // TODO add verification
+    if is_valid {
+        return Ok(r);
+    } else {
+        return Err(Error::InvalidPublicKey);
+    }
 }

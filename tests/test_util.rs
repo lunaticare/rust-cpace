@@ -4,7 +4,41 @@ use curve25519_dalek::{
     ristretto::{CompressedRistretto, RistrettoPoint},
     scalar::Scalar,
 };
-use pake_cpace::util::{calc_ycapital, msg, prepend_len_vec};
+use pake_cpace::util::{calc_ycapital, msg, prepend_len_vec, scalar_mult_vfy};
+
+fn y_a() -> Scalar {
+    scalar_from_bytes_mod_order_wide_hex_string(&String::from_iter([
+        "da3d23700a9e5699258aef94dc060dfda5ebb61f02a5ea77fad53f4f",
+        "f0976d08",
+    ]))
+}
+
+fn g() -> RistrettoPoint {
+    ristretto_point_from_compressed_encoding_hex_string(
+        "5e25411ca1ad7c9debfd0b33ad987a95cefef2d3f15dcc8bd26415a5dfe2e15a",
+    )
+}
+
+fn ycapital_a() -> RistrettoPoint {
+    ristretto_point_from_compressed_encoding_hex_string(&String::from_iter([
+        "383a85dd236978f17f8c8545b50dabc52a39fcdab2cf8bc531ce040f",
+        "f77ca82d",
+    ]))
+}
+
+fn ycapital_b() -> RistrettoPoint {
+    ristretto_point_from_compressed_encoding_hex_string(&String::from_iter([
+        "a6206309c0e8e5f579295e35997ac4300ab3fecec3c17f7b604f3e69",
+        "8fa1383c",
+    ]))
+}
+
+fn y_b() -> Scalar {
+    scalar_from_bytes_mod_order_wide_hex_string(&String::from_iter([
+        "d2316b454718c35362d83d69df6320f38578ed5984651435e2949762",
+        "d900b80d",
+    ]))
+}
 
 #[test]
 fn test_prepend_len_1() {
@@ -55,66 +89,54 @@ fn test_prepend_len_3() {
 
 #[test]
 fn test_calc_ycapital_1() {
-    let ya = scalar_from_bytes_mod_order_wide_hex_string(&String::from_iter([
-        "da3d23700a9e5699258aef94dc060dfda5ebb61f02a5ea77fad53f4f",
-        "f0976d08",
-    ]));
-    let g = ristretto_point_from_compressed_encoding_hex_string(
-        "5e25411ca1ad7c9debfd0b33ad987a95cefef2d3f15dcc8bd26415a5dfe2e15a",
-    );
-    let r_actual = calc_ycapital(&ya, &g);
-    let r_expected = ristretto_point_from_compressed_encoding_hex_string(&String::from_iter([
-        "383a85dd236978f17f8c8545b50dabc52a39fcdab2cf8bc531ce040f",
-        "f77ca82d",
-    ]));
-    assert_eq!(r_expected, r_actual);
+    let r_actual = calc_ycapital(&y_a(), &g());
+    assert_eq!(ycapital_a(), r_actual);
 }
 
 #[test]
 fn test_calc_ycapital_2() {
-    let ya = scalar_from_bytes_mod_order_wide_hex_string(&String::from_iter([
-        "d2316b454718c35362d83d69df6320f38578ed5984651435e2949762",
-        "d900b80d",
-    ]));
-    let g = ristretto_point_from_compressed_encoding_hex_string(
-        "5e25411ca1ad7c9debfd0b33ad987a95cefef2d3f15dcc8bd26415a5dfe2e15a",
-    );
-    let r_actual = calc_ycapital(&ya, &g);
-    let r_expected = ristretto_point_from_compressed_encoding_hex_string(&String::from_iter([
-        "a6206309c0e8e5f579295e35997ac4300ab3fecec3c17f7b604f3e69",
-        "8fa1383c",
-    ]));
+    let r_actual = calc_ycapital(&y_b(), &g());
+    let r_expected = ycapital_b();
     assert_eq!(r_expected, r_actual);
 }
 
 #[test]
 fn test_msg_1() {
-    let ad = "ADa";
-    let y = ristretto_point_from_compressed_encoding_hex_string(&String::from_iter([
-        "383a85dd236978f17f8c8545b50dabc52a39fcdab2cf8bc531ce040f",
-        "f77ca82d",
-    ]));
-    let r_actual = hex::encode(msg(&y, &ad));
-    let r_expected = String::from_iter([
+    let ad_a = "ADa";
+    let msg_a_actual = hex::encode(msg(&ycapital_a(), &ad_a));
+    let msg_a_expected = String::from_iter([
         "20383a85dd236978f17f8c8545b50dabc52a39fcdab2cf8bc531ce04",
         "0ff77ca82d03414461",
     ]);
-    assert_eq!(r_expected, r_actual);
+    assert_eq!(msg_a_expected, msg_a_actual);
 }
 
 #[test]
 fn test_msg_2() {
-    let ad = "ADb";
-    let y = ristretto_point_from_compressed_encoding_hex_string(&String::from_iter([
-        "a6206309c0e8e5f579295e35997ac4300ab3fecec3c17f7b604f3e69",
-        "8fa1383c",
-    ]));
-    let r_actual = hex::encode(msg(&y, &ad));
-    let r_expected = String::from_iter([
+    let ad_b = "ADb";
+    let msg_b_actual = hex::encode(msg(&ycapital_b(), &ad_b));
+    let msg_b_expected = String::from_iter([
         "20a6206309c0e8e5f579295e35997ac4300ab3fecec3c17f7b604f3e",
         "698fa1383c03414462",
     ]);
-    assert_eq!(r_expected, r_actual);
+    assert_eq!(msg_b_expected, msg_b_actual);
+}
+
+#[test]
+fn test_scalar_mult_vfy_1() {
+    assert_eq!(scalar_mult_vfy(&y_a(), &ycapital_b()).expect("fail"), k());
+}
+
+#[test]
+fn test_scalar_mult_vfy_2() {
+    assert_eq!(scalar_mult_vfy(&y_b(), &ycapital_a()).expect("fail"), k());
+}
+
+fn k() -> RistrettoPoint {
+    return ristretto_point_from_compressed_encoding_hex_string(&String::from_iter([
+        "fa1d0318864e2cacb26875f1b791c9ae83204fe8359addb53e95a2e9",
+        "8893853f",
+    ]));
 }
 
 fn ristretto_point_from_uniform_bytes_hex_string(s: &str) -> RistrettoPoint {
