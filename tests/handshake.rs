@@ -14,6 +14,14 @@ const SESSION_ID: [u8; 16] = [
     0x7e, 0x4b, 0x47, 0x91, 0xd6, 0xa8, 0xef, 0x01, 0x9b, 0x93, 0x6c, 0x79, 0xfb, 0x7f, 0x2c, 0x57,
 ];
 
+fn isk() -> String {
+    String::from_iter([
+        "e91ccb2c0f5e0d0993a33956e3be59754f3f2b07db57631f5394452e",
+        "a2e7b4354674eb1f5686c078462bf83bec72e8743df440108e638f35",
+        "26d9b90e85be096f",
+    ])
+}
+
 #[test]
 fn test_cpace() {
     let client = CPace::<Hash>::step1("password", ID_A, ID_B, Some("ad")).unwrap();
@@ -154,10 +162,44 @@ fn test_isk_calculation_initiator_responder() {
 
     assert_eq!(
         String::from_iter([hex::encode(shared_keys.k1), hex::encode(shared_keys.k2)]),
-        String::from_iter([
-            "e91ccb2c0f5e0d0993a33956e3be59754f3f2b07db57631f5394452e",
-            "a2e7b4354674eb1f5686c078462bf83bec72e8743df440108e638f35",
-            "26d9b90e85be096f",
-        ])
+        isk(),
+    );
+}
+
+#[test]
+fn test_isk_calculation_initiator_responder_step3_stateless() {
+    let client =
+        CPace::<Hash>::step1_debug(PASSWORD, ID_A, ID_B, None::<&str>, SESSION_ID, &mut || {
+            Ok(y_a())
+        })
+        .unwrap();
+
+    let step2 = CPace::<Hash>::step2_debug(
+        &client.packet(),
+        PASSWORD,
+        ID_A,
+        ID_B,
+        Some(AD_A),
+        Some(AD_B),
+        &mut || Ok(y_b()),
+    )
+    .unwrap();
+
+    let shared_keys = CPace::<Hash>::step3_stateless(
+        client.session_id(),
+        &step2.packet(),
+        &client.scalar(),
+        &client.ycapital_a().compress().to_bytes(),
+        Some(AD_A),
+        Some(AD_B),
+    )
+    .unwrap();
+
+    assert_eq!(shared_keys.k1, step2.shared_keys().k1);
+    assert_eq!(shared_keys.k2, step2.shared_keys().k2);
+
+    assert_eq!(
+        String::from_iter([hex::encode(shared_keys.k1), hex::encode(shared_keys.k2)]),
+        isk(),
     );
 }
