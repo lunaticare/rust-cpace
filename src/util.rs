@@ -44,23 +44,35 @@ pub fn smallvec_push<T: AsRef<[u8]>>(v: &mut SmallVec<[u8; 8]>, b: T) {
     }
 }
 
-pub trait AccumulatorOps {
+pub trait PrependLen {
     fn prepend_len<T: AsRef<[u8]>>(&mut self, input: &T) -> usize;
-    fn get_hash(&mut self) -> [u8; 64];
 }
 
-impl AccumulatorOps for Hash {
+impl PrependLen for Hash {
     fn prepend_len<T: AsRef<[u8]>>(&mut self, input: &T) -> usize {
         prepend_len_hash(self, input)
     }
+}
+
+impl PrependLen for SmallVec<[u8; 8]> {
+    fn prepend_len<T: AsRef<[u8]>>(&mut self, input: &T) -> usize {
+        prepend_len_smallvec(self, input)
+    }
+}
+
+pub trait GetHash {
+    fn get_hash(&mut self) -> [u8; 64];
+}
+
+impl GetHash for Hash {
     fn get_hash(&mut self) -> [u8; 64] {
         self.finalize()
     }
 }
 
-pub fn generator_string<T: AsRef<[u8]>, D>(dsi: &str, prs: &T, id_a: &T, id_b: &T, sid: &[u8], acc: &mut D)
+pub fn generator_string<T: AsRef<[u8]>, D>(dsi: &str, prs: &T, ci: &T, sid: &[u8], acc: &mut D)
 where
-    D: AccumulatorOps,
+    D: PrependLen,
 {
     let mut header_len = 0;
     header_len += acc.prepend_len(&dsi);
@@ -69,7 +81,7 @@ where
     let pad_len = cmp::max(0, zpad.len() - header_len - 1);
 
     acc.prepend_len(&&zpad[..pad_len]);
-    append_channel_identifier(acc, id_a, id_b);
+    acc.prepend_len(&ci);
     acc.prepend_len(&sid);
 }
 
@@ -89,12 +101,12 @@ pub fn msg<T: AsRef<[u8]>>(y: &RistrettoPoint, ad: &T) -> SmallVec<[u8; 8]> {
     return r;
 }
 
-pub fn append_channel_identifier<Acc, T: AsRef<[u8]>>(acc: &mut Acc, id_a: &T, id_b: &T)
-where
-    Acc: AccumulatorOps,
-{
-    acc.prepend_len(id_a);
-    acc.prepend_len(id_b);
+pub fn channel_identifier<T: AsRef<[u8]>>(id_a: &T, id_b: &T) -> SmallVec<[u8; 8]> {
+    let mut ci = SmallVec::<[u8; 8]>::new();
+
+    ci.prepend_len(id_a);
+    ci.prepend_len(id_b);
+    ci
 }
 
 pub fn scalar_mult_vfy(y: &Scalar, g: &RistrettoPoint) -> Result<RistrettoPoint, crate::Error> {

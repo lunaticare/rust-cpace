@@ -10,8 +10,11 @@ use curve25519_dalek::{
     traits::IsIdentity,
 };
 use getrandom::getrandom;
-use hmac_sha512::{Hash, BYTES as SHA512_BYTES};
-use util::{calc_ycapital, generator_string, sample_scalar, scalar_mult_vfy, AccumulatorOps};
+use hmac_sha512::BYTES as SHA512_BYTES;
+use util::{
+    calc_ycapital, channel_identifier, generator_string, sample_scalar, scalar_mult_vfy, GetHash,
+    PrependLen,
+};
 
 pub const SESSION_ID_BYTES: usize = 16;
 pub const STEP1_PACKET_BYTES: usize = 16 + 32;
@@ -63,7 +66,7 @@ pub struct Step1Out<A> {
 
 impl<A> Step1Out<A>
 where
-    A: AccumulatorOps + Default,
+    A: PrependLen + GetHash + Default,
 {
     pub fn session_id(&self) -> [u8; SESSION_ID_BYTES] {
         self.ctx.session_id
@@ -108,7 +111,7 @@ impl Step2Out {
 
 impl<A> CPace<A>
 where
-    A: AccumulatorOps + Default,
+    A: PrependLen + GetHash + Default,
 {
     pub fn new<RandomScalarGenerator>(
         session_id: [u8; SESSION_ID_BYTES],
@@ -132,7 +135,14 @@ where
             ));
         }
         let mut acc = A::default();
-        generator_string(&dsi, &password, &id_a, &id_b, &session_id, &mut acc);
+        let ci = channel_identifier(&id_a, &id_b);
+        generator_string(
+            &dsi.as_ref(),
+            &password.as_ref(),
+            &ci.as_ref(),
+            &session_id,
+            &mut acc,
+        );
 
         let h = acc.get_hash();
         let mut p = RistrettoPoint::from_uniform_bytes(&h);

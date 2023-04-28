@@ -6,8 +6,8 @@ use curve25519_dalek::{
 };
 use hmac_sha512::Hash;
 use pake_cpace::util::{
-    append_channel_identifier, calc_ycapital, msg, prepend_len_closure, prepend_len_hash,
-    scalar_mult_vfy, AccumulatorOps,
+    calc_ycapital, channel_identifier, msg, prepend_len_closure, prepend_len_hash, scalar_mult_vfy,
+    GetHash, PrependLen,
 };
 
 pub const ID_A: &str = "Ainitiator";
@@ -94,11 +94,14 @@ pub struct DebugAcc {
     pub hash: Hash,
 }
 
-impl AccumulatorOps for DebugAcc {
+impl PrependLen for DebugAcc {
     fn prepend_len<T: AsRef<[u8]>>(&mut self, input: &T) -> usize {
         prepend_len_hash(&mut self.hash, input);
         prepend_len_vec(&mut self.v, input)
     }
+}
+
+impl GetHash for DebugAcc {
     fn get_hash(&mut self) -> [u8; 64] {
         self.hash.finalize()
     }
@@ -205,7 +208,6 @@ fn test_scalar_mult_vfy_2() {
 
 #[test]
 fn test_channel_identifier() {
-    let mut acc = DebugAcc::default();
-    append_channel_identifier(&mut acc, &ID_A, &ID_B);
-    assert_eq!(&acc.v.as_slice(), &CI.as_bytes());
+    let ci = channel_identifier(&ID_A, &ID_B);
+    assert_eq!(&ci.as_slice(), &CI.as_bytes());
 }
