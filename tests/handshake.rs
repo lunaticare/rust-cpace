@@ -1,8 +1,6 @@
 use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use hex;
 use hmac_sha512::{Hash, BLOCKBYTES, BYTES as SHA512_BYTES};
-use mockall::predicate::*;
-use mockall::*;
 use pake_cpace::{CPace, DSI};
 use std::{iter::FromIterator, str};
 
@@ -129,8 +127,4 @@ fn test_isk_calculation_initiator_responder() {
             "26d9b90e85be096f",
         ])
     );
-}
-
-mock! {
-    Hash {}
 }
