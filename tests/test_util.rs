@@ -6,9 +6,13 @@ use curve25519_dalek::{
 };
 use hmac_sha512::Hash;
 use pake_cpace::util::{
-    calc_ycapital, msg, prepend_len_closure, prepend_len_hash, scalar_mult_vfy, AccumulatorOps,
+    append_channel_identifier, calc_ycapital, msg, prepend_len_closure, prepend_len_hash,
+    scalar_mult_vfy, AccumulatorOps,
 };
 
+pub const ID_A: &str = "Ainitiator";
+pub const ID_B: &str = "Bresponder";
+const CI: &str = "\nAinitiator\nBresponder";
 pub const AD_A: &str = "ADa";
 pub const AD_B: &str = "ADb";
 
@@ -53,7 +57,7 @@ pub fn k() -> RistrettoPoint {
     ]));
 }
 
-fn ristretto_point_from_uniform_bytes_hex_string(s: &str) -> RistrettoPoint {
+pub fn ristretto_point_from_uniform_bytes_hex_string(s: &str) -> RistrettoPoint {
     let input = hex::decode(s).unwrap();
     let mut fixed_size_input = [0u8; 64];
     fixed_size_input.copy_from_slice(&input);
@@ -197,4 +201,11 @@ fn test_scalar_mult_vfy_1() {
 #[test]
 fn test_scalar_mult_vfy_2() {
     assert_eq!(scalar_mult_vfy(&y_b(), &ycapital_a()).unwrap(), k());
+}
+
+#[test]
+fn test_channel_identifier() {
+    let mut acc = DebugAcc::default();
+    append_channel_identifier(&mut acc, &ID_A, &ID_B);
+    assert_eq!(&acc.v.as_slice(), &CI.as_bytes());
 }

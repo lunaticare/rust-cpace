@@ -5,9 +5,10 @@ use pake_cpace::{CPace, DSI};
 use std::{iter::FromIterator, str};
 
 mod test_util;
-use test_util::{g, ristretto_point_from_uniform_bytes_hex_string, y_a, y_b, DebugAcc, AD_A, AD_B};
+use test_util::{
+    g, ristretto_point_from_uniform_bytes_hex_string, y_a, y_b, DebugAcc, AD_A, AD_B, ID_A, ID_B,
+};
 
-const CI: &str = "\nAinitiator\nBresponder";
 const PASSWORD: &str = "Password";
 const SESSION_ID: [u8; 16] = [
     0x7e, 0x4b, 0x47, 0x91, 0xd6, 0xa8, 0xef, 0x01, 0x9b, 0x93, 0x6c, 0x79, 0xfb, 0x7f, 0x2c, 0x57,
@@ -15,13 +16,17 @@ const SESSION_ID: [u8; 16] = [
 
 #[test]
 fn test_cpace() {
-    let id_a = "client";
-    let id_b = "server";
-    let ci = format!("{}{}", id_a, id_b).as_str().to_owned();
-    let client = CPace::<Hash>::step1("password", &ci, Some("ad")).unwrap();
+    let client = CPace::<Hash>::step1("password", ID_A, ID_B, Some("ad")).unwrap();
 
-    let step2 =
-        CPace::<Hash>::step2(&client.packet(), "password", &ci, Some(AD_A), Some(AD_B)).unwrap();
+    let step2 = CPace::<Hash>::step2(
+        &client.packet(),
+        "password",
+        ID_A,
+        ID_B,
+        Some(AD_A),
+        Some(AD_B),
+    )
+    .unwrap();
 
     let shared_keys = client
         .step3(&step2.packet(), Some(AD_A), Some(AD_B))
@@ -31,9 +36,37 @@ fn test_cpace() {
     assert_eq!(shared_keys.k2, step2.shared_keys().k2);
 }
 
+// #[test]
+// fn test_cpace_step3_stateless() {
+//     let client = CPace::<Hash>::step1("password", ID_A, ID_B, Some("ad")).unwrap();
+
+//     let step2 = CPace::<Hash>::step2(
+//         &client.packet(),
+//         "password",
+//         ID_A,
+//         ID_B,
+//         Some(AD_A),
+//         Some(AD_B),
+//     )
+//     .unwrap();
+
+//     let shared_keys = CPace::<Hash>::step3_stateless(
+//         &step2.packet(),
+//         &client.scalar(),
+//         &client.packet(),
+//         Some(AD_A),
+//         Some(AD_B),
+//     )
+//     .unwrap();
+
+//     assert_eq!(shared_keys.k1, step2.shared_keys().k1);
+//     assert_eq!(shared_keys.k2, step2.shared_keys().k2);
+// }
+
 #[test]
 fn test_calculate_generator() {
-    let result = CPace::<DebugAcc>::new(SESSION_ID, PASSWORD, CI, DSI, &mut || Ok(y_a())).unwrap();
+    let result =
+        CPace::<DebugAcc>::new(SESSION_ID, PASSWORD, ID_A, ID_B, DSI, &mut || Ok(y_a())).unwrap();
     assert_eq!(
         hex::encode(result.acc.v.as_slice()),
         String::from_iter([
@@ -98,12 +131,15 @@ fn test_decode_compressed_ristretto_point_from_test_case() {
 #[test]
 fn test_isk_calculation_initiator_responder() {
     let step1 =
-        CPace::<DebugAcc>::step1_debug(PASSWORD, CI, None::<&str>, SESSION_ID, &mut || Ok(y_a()))
-            .unwrap();
+        CPace::<DebugAcc>::step1_debug(PASSWORD, ID_A, ID_B, None::<&str>, SESSION_ID, &mut || {
+            Ok(y_a())
+        })
+        .unwrap();
     let step2 = CPace::<DebugAcc>::step2_debug(
         &step1.packet(),
         PASSWORD,
-        CI,
+        ID_A,
+        ID_B,
         Some(AD_A),
         Some(AD_B),
         &mut || Ok(y_b()),

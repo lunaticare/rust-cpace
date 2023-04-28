@@ -58,7 +58,7 @@ impl AccumulatorOps for Hash {
     }
 }
 
-pub fn generator_string<T: AsRef<[u8]>, D>(dsi: &str, prs: &T, ci: &T, sid: &[u8], acc: &mut D)
+pub fn generator_string<T: AsRef<[u8]>, D>(dsi: &str, prs: &T, id_a: &T, id_b: &T, sid: &[u8], acc: &mut D)
 where
     D: AccumulatorOps,
 {
@@ -69,7 +69,7 @@ where
     let pad_len = cmp::max(0, zpad.len() - header_len - 1);
 
     acc.prepend_len(&&zpad[..pad_len]);
-    acc.prepend_len(&ci);
+    append_channel_identifier(acc, id_a, id_b);
     acc.prepend_len(&sid);
 }
 
@@ -87,6 +87,14 @@ pub fn msg<T: AsRef<[u8]>>(y: &RistrettoPoint, ad: &T) -> SmallVec<[u8; 8]> {
     prepend_len_smallvec(&mut r, y.compress().as_bytes());
     prepend_len_smallvec(&mut r, ad);
     return r;
+}
+
+pub fn append_channel_identifier<Acc, T: AsRef<[u8]>>(acc: &mut Acc, id_a: &T, id_b: &T)
+where
+    Acc: AccumulatorOps,
+{
+    acc.prepend_len(id_a);
+    acc.prepend_len(id_b);
 }
 
 pub fn scalar_mult_vfy(y: &Scalar, g: &RistrettoPoint) -> Result<RistrettoPoint, crate::Error> {
