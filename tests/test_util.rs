@@ -54,21 +54,21 @@ pub fn k() -> RistrettoPoint {
 }
 
 fn ristretto_point_from_uniform_bytes_hex_string(s: &str) -> RistrettoPoint {
-    let input = hex::decode(s).expect("fail");
+    let input = hex::decode(s).unwrap();
     let mut fixed_size_input = [0u8; 64];
     fixed_size_input.copy_from_slice(&input);
     return RistrettoPoint::from_uniform_bytes(&fixed_size_input);
 }
 
 fn ristretto_point_from_compressed_encoding_hex_string(s: &str) -> RistrettoPoint {
-    let input = hex::decode(s).expect("fail");
+    let input = hex::decode(s).unwrap();
     return CompressedRistretto::from_slice(input.as_slice())
         .decompress()
-        .expect("fail");
+        .unwrap();
 }
 
 fn scalar_from_bytes_mod_order_wide_hex_string(s: &str) -> Scalar {
-    let input = hex::decode(s).expect("fail");
+    let input = hex::decode(s).unwrap();
     let mut fixed_size_input = [0u8; 32];
     fixed_size_input.copy_from_slice(&input);
     return Scalar::from_bits(fixed_size_input);
@@ -191,10 +191,10 @@ fn test_msg_2() {
 
 #[test]
 fn test_scalar_mult_vfy_1() {
-    assert_eq!(scalar_mult_vfy(&y_a(), &ycapital_b()).expect("fail"), k());
+    assert_eq!(scalar_mult_vfy(&y_a(), &ycapital_b()).unwrap(), k());
 }
 
 #[test]
 fn test_scalar_mult_vfy_2() {
-    assert_eq!(scalar_mult_vfy(&y_b(), &ycapital_a()).expect("fail"), k());
+    assert_eq!(scalar_mult_vfy(&y_b(), &ycapital_a()).unwrap(), k());
 }
