@@ -11,7 +11,10 @@ use curve25519_dalek::{
 };
 use getrandom::getrandom;
 use hmac_sha512::{Hash, BYTES as SHA512_BYTES};
-use util::{calc_ycapital, generator_string, prepend_len_hash_vec, sample_scalar, scalar_mult_vfy};
+use util::{
+    calc_ycapital, generator_string, prepend_len_hash, prepend_len_hash_vec, sample_scalar,
+    scalar_mult_vfy, AccumulatorOps,
+};
 
 pub const SESSION_ID_BYTES: usize = 16;
 pub const STEP1_PACKET_BYTES: usize = 16 + 32;
@@ -48,20 +51,23 @@ pub struct SharedKeys {
 }
 
 #[derive(Debug, Clone)]
-pub struct CPace {
+pub struct CPace<A> {
     pub session_id: [u8; SESSION_ID_BYTES],
     pub p: RistrettoPoint,
     pub r: Scalar,
     pub h: [u8; SHA512_BYTES],
-    pub generator: Vec<u8>,
+    pub acc: A,
 }
 
-pub struct Step1Out {
-    ctx: CPace,
+pub struct Step1Out<A> {
+    ctx: CPace<A>,
     step1_packet: [u8; STEP1_PACKET_BYTES],
 }
 
-impl Step1Out {
+impl<A> Step1Out<A>
+where
+    A: AccumulatorOps + Default,
+{
     pub fn packet(&self) -> [u8; STEP1_PACKET_BYTES] {
         self.step1_packet
     }
@@ -95,7 +101,10 @@ impl Step2Out {
     }
 }
 
-impl CPace {
+impl<A> CPace<A>
+where
+    A: AccumulatorOps + Default,
+{
     pub fn new<RandomScalarGenerator>(
         session_id: [u8; SESSION_ID_BYTES],
         password: &str,
@@ -111,11 +120,10 @@ impl CPace {
                 "Channel identifier must be at most 511 bytes long",
             ));
         }
-        let mut st = Hash::new();
-        let mut gen: Vec<u8> = Vec::new();
-        generator_string(&dsi, &password, &ci, &session_id, &mut st, &mut gen);
+        let mut acc = A::default();
+        generator_string(&dsi, &password, &ci, &session_id, &mut acc);
 
-        let h = st.finalize();
+        let h = acc.get_hash();
         let mut p = RistrettoPoint::from_uniform_bytes(&h);
         let r = rsg()?;
         p = calc_ycapital(&r, &p);
@@ -124,7 +132,7 @@ impl CPace {
             p,
             r,
             h,
-            generator: gen,
+            acc,
         })
     }
 
@@ -166,7 +174,7 @@ impl CPace {
         password: &str,
         ci: &str,
         ad: Option<T>,
-    ) -> Result<Step1Out, Error> {
+    ) -> Result<Step1Out<A>, Error> {
         let mut session_id = [0u8; SESSION_ID_BYTES];
         getrandom(&mut session_id)?;
         return CPace::step1_debug(password, ci, ad, session_id, &mut || sample_scalar());
@@ -178,7 +186,7 @@ impl CPace {
         ad: Option<T>,
         session_id: [u8; SESSION_ID_BYTES],
         rsg: &mut RandomScalarGenerator,
-    ) -> Result<Step1Out, Error>
+    ) -> Result<Step1Out<A>, Error>
     where
         RandomScalarGenerator: FnMut() -> Result<Scalar, getrandom::Error>,
     {
@@ -196,7 +204,7 @@ impl CPace {
         ad_a: Option<T>,
         ad_b: Option<T>,
     ) -> Result<Step2Out, Error> {
-        return CPace::step2_debug(step1_packet, password, ci, ad_a, ad_b, &mut || {
+        return CPace::<A>::step2_debug(step1_packet, password, ci, ad_a, ad_b, &mut || {
             sample_scalar()
         });
     }
@@ -216,7 +224,7 @@ impl CPace {
         let mut session_id = [0u8; SESSION_ID_BYTES];
         session_id.copy_from_slice(&step1_packet[..SESSION_ID_BYTES]);
         let ya = &step1_packet[SESSION_ID_BYTES..];
-        let ctx = CPace::new(session_id, password, ci, DSI, rsg)?;
+        let ctx = CPace::<A>::new(session_id, password, ci, DSI, rsg)?;
         let mut step2_packet = [0u8; STEP2_PACKET_BYTES];
         step2_packet.copy_from_slice(ctx.p.compress().as_bytes());
         let ya = CompressedRistretto::from_slice(ya)

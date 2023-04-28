@@ -65,25 +65,33 @@ pub fn smallvec_push<T: AsRef<[u8]>>(v: &mut SmallVec<[u8; 8]>, b: T) {
     }
 }
 
-pub fn generator_string<T: AsRef<[u8]>>(
-    dsi: &str,
-    prs: &T,
-    ci: &T,
-    sid: &[u8],
-    hash: &mut Hash,
-    v: &mut Vec<u8>,
-) {
-    let mut prepend_len = |i: &dyn AsRef<[u8]>| prepend_len_hash_vec(hash, v, &i.as_ref());
+pub trait AccumulatorOps {
+    fn prepend_len<T: AsRef<[u8]>>(&mut self, input: &T) -> usize;
+    fn get_hash(&mut self) -> [u8; 64];
+}
 
+impl AccumulatorOps for Hash {
+    fn prepend_len<T: AsRef<[u8]>>(&mut self, input: &T) -> usize {
+        prepend_len_hash(self, input)
+    }
+    fn get_hash(&mut self) -> [u8; 64] {
+        self.finalize()
+    }
+}
+
+pub fn generator_string<T: AsRef<[u8]>, D>(dsi: &str, prs: &T, ci: &T, sid: &[u8], acc: &mut D)
+where
+    D: AccumulatorOps,
+{
     let mut header_len = 0;
-    header_len += prepend_len(&dsi);
-    header_len += prepend_len(&prs);
+    header_len += acc.prepend_len(&dsi);
+    header_len += acc.prepend_len(&prs);
     let zpad = [0u8; BLOCKBYTES];
     let pad_len = cmp::max(0, zpad.len() - header_len - 1);
 
-    prepend_len(&&zpad[..pad_len]);
-    prepend_len(&ci);
-    prepend_len(&sid);
+    acc.prepend_len(&&zpad[..pad_len]);
+    acc.prepend_len(&ci);
+    acc.prepend_len(&sid);
 }
 
 pub fn sample_scalar() -> Result<Scalar, getrandom::Error> {

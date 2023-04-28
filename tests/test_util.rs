@@ -4,10 +4,19 @@ use curve25519_dalek::{
     ristretto::{CompressedRistretto, RistrettoPoint},
     scalar::Scalar,
 };
-use pake_cpace::util::{calc_ycapital, msg, prepend_len_vec, scalar_mult_vfy};
+use hmac_sha512::Hash;
+use pake_cpace::util::{
+    calc_ycapital, msg, prepend_len_hash, prepend_len_vec, scalar_mult_vfy, AccumulatorOps,
+};
 
 pub const AD_A: &str = "ADa";
 pub const AD_B: &str = "ADb";
+
+pub fn g() -> RistrettoPoint {
+    ristretto_point_from_compressed_encoding_hex_string(
+        "5e25411ca1ad7c9debfd0b33ad987a95cefef2d3f15dcc8bd26415a5dfe2e15a",
+    )
+}
 
 pub fn y_a() -> Scalar {
     scalar_from_bytes_mod_order_wide_hex_string(&String::from_iter([
@@ -16,10 +25,11 @@ pub fn y_a() -> Scalar {
     ]))
 }
 
-pub fn g() -> RistrettoPoint {
-    ristretto_point_from_compressed_encoding_hex_string(
-        "5e25411ca1ad7c9debfd0b33ad987a95cefef2d3f15dcc8bd26415a5dfe2e15a",
-    )
+pub fn y_b() -> Scalar {
+    scalar_from_bytes_mod_order_wide_hex_string(&String::from_iter([
+        "d2316b454718c35362d83d69df6320f38578ed5984651435e2949762",
+        "d900b80d",
+    ]))
 }
 
 pub fn ycapital_a() -> RistrettoPoint {
@@ -33,13 +43,6 @@ pub fn ycapital_b() -> RistrettoPoint {
     ristretto_point_from_compressed_encoding_hex_string(&String::from_iter([
         "a6206309c0e8e5f579295e35997ac4300ab3fecec3c17f7b604f3e69",
         "8fa1383c",
-    ]))
-}
-
-pub fn y_b() -> Scalar {
-    scalar_from_bytes_mod_order_wide_hex_string(&String::from_iter([
-        "d2316b454718c35362d83d69df6320f38578ed5984651435e2949762",
-        "d900b80d",
     ]))
 }
 
@@ -69,6 +72,30 @@ fn scalar_from_bytes_mod_order_wide_hex_string(s: &str) -> Scalar {
     let mut fixed_size_input = [0u8; 32];
     fixed_size_input.copy_from_slice(&input);
     return Scalar::from_bits(fixed_size_input);
+}
+
+pub struct DebugAcc {
+    pub v: Vec<u8>,
+    pub hash: Hash,
+}
+
+impl AccumulatorOps for DebugAcc {
+    fn prepend_len<T: AsRef<[u8]>>(&mut self, input: &T) -> usize {
+        prepend_len_hash(&mut self.hash, input);
+        prepend_len_vec(&mut self.v, input)
+    }
+    fn get_hash(&mut self) -> [u8; 64] {
+        self.hash.finalize()
+    }
+}
+
+impl Default for DebugAcc {
+    fn default() -> Self {
+        DebugAcc {
+            v: Vec::new(),
+            hash: Hash::new(),
+        }
+    }
 }
 
 #[test]

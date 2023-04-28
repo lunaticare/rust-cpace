@@ -1,11 +1,11 @@
 use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use hex;
-use hmac_sha512::{Hash, BLOCKBYTES, BYTES as SHA512_BYTES};
+use hmac_sha512::Hash;
 use pake_cpace::{CPace, DSI};
 use std::{iter::FromIterator, str};
 
 mod test_util;
-use test_util::{g, y_a, y_b, AD_A, AD_B};
+use test_util::{g, y_a, y_b, DebugAcc, AD_A, AD_B};
 
 const CI: &str = "\nAinitiator\nBresponder";
 const PASSWORD: &str = "Password";
@@ -18,9 +18,10 @@ fn test_cpace() {
     let id_a = "client";
     let id_b = "server";
     let ci = format!("{}{}", id_a, id_b).as_str().to_owned();
-    let client = CPace::step1("password", &ci, Some("ad")).unwrap();
+    let client = CPace::<Hash>::step1("password", &ci, Some("ad")).unwrap();
 
-    let step2 = CPace::step2(&client.packet(), "password", &ci, Some(AD_A), Some(AD_B)).unwrap();
+    let step2 =
+        CPace::<Hash>::step2(&client.packet(), "password", &ci, Some(AD_A), Some(AD_B)).unwrap();
 
     let shared_keys = client
         .step3(&step2.packet(), Some(AD_A), Some(AD_B))
@@ -32,9 +33,9 @@ fn test_cpace() {
 
 #[test]
 fn test_calculate_generator() {
-    let result = CPace::new(SESSION_ID, PASSWORD, CI, DSI, &mut || Ok(y_a())).unwrap();
+    let result = CPace::<DebugAcc>::new(SESSION_ID, PASSWORD, CI, DSI, &mut || Ok(y_a())).unwrap();
     assert_eq!(
-        hex::encode(result.generator.as_slice()),
+        hex::encode(result.acc.v.as_slice()),
         String::from_iter([
             "11435061636552697374726574746f3235350850617373776f726464",
             "00000000000000000000000000000000000000000000000000000000",
@@ -103,8 +104,9 @@ fn test_decode_compressed_ristretto_point_from_test_case() {
 #[test]
 fn test_isk_calculation_initiator_responder() {
     let step1 =
-        CPace::step1_debug(PASSWORD, CI, None::<&str>, SESSION_ID, &mut || Ok(y_a())).unwrap();
-    let step2 = CPace::step2_debug(
+        CPace::<DebugAcc>::step1_debug(PASSWORD, CI, None::<&str>, SESSION_ID, &mut || Ok(y_a()))
+            .unwrap();
+    let step2 = CPace::<DebugAcc>::step2_debug(
         &step1.packet(),
         PASSWORD,
         CI,
