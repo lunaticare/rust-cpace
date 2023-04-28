@@ -65,12 +65,20 @@ impl<A> Step1Out<A>
 where
     A: AccumulatorOps + Default,
 {
+    pub fn session_id(&self) -> [u8; SESSION_ID_BYTES] {
+        self.ctx.session_id
+    }
+
     pub fn packet(&self) -> [u8; STEP1_PACKET_BYTES] {
         self.step1_packet
     }
 
     pub fn scalar(&self) -> [u8; EC_SCALAR_BYTES] {
         self.ctx.r.to_bytes()
+    }
+
+    pub fn ycapital_a(&self) -> RistrettoPoint {
+        self.ctx.p
     }
 
     pub fn step3<T: AsRef<[u8]>>(
@@ -262,6 +270,7 @@ where
     }
 
     pub fn step3_stateless<T: AsRef<[u8]>>(
+        session_id: [u8; SESSION_ID_BYTES],
         step2_packet: &[u8; STEP2_PACKET_BYTES],
         scalar: &[u8; EC_SCALAR_BYTES],
         ya_bytes: &[u8; STEP2_PACKET_BYTES],
@@ -274,23 +283,14 @@ where
         let yb = CompressedRistretto::from_slice(step2_packet)
             .decompress()
             .ok_or(Error::InvalidPublicKey)?;
-
-        let op = yb;
-        if op.is_identity() {
-            return Err(Error::InvalidPublicKey);
-        }
         let r = Scalar::from_bytes_mod_order(*scalar);
-
-        let p = op * r;
-        let mut st = Hash::new();
-        st.update(DSI_ISK);
-        st.update(p.compress().as_bytes());
-        st.update(ya.compress().as_bytes());
-        st.update(yb.compress().as_bytes());
-        let h = st.finalize();
-        let (mut k1, mut k2) = ([0u8; SHARED_KEY_BYTES], [0u8; SHARED_KEY_BYTES]);
-        k1.copy_from_slice(&h[..SHARED_KEY_BYTES]);
-        k2.copy_from_slice(&h[SHARED_KEY_BYTES..]);
-        Ok(SharedKeys { k1, k2 })
+        let ctx = CPace {
+            session_id: session_id,
+            p: ya,
+            r,
+            h: [0u8; 64],
+            acc: A::default(),
+        };
+        ctx.finalize(yb, ya, yb, ad_a, ad_b)
     }
 }

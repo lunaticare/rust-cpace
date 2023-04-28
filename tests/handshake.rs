@@ -36,32 +36,33 @@ fn test_cpace() {
     assert_eq!(shared_keys.k2, step2.shared_keys().k2);
 }
 
-// #[test]
-// fn test_cpace_step3_stateless() {
-//     let client = CPace::<Hash>::step1("password", ID_A, ID_B, Some("ad")).unwrap();
+#[test]
+fn test_cpace_step3_stateless() {
+    let client = CPace::<Hash>::step1("password", ID_A, ID_B, Some("ad")).unwrap();
 
-//     let step2 = CPace::<Hash>::step2(
-//         &client.packet(),
-//         "password",
-//         ID_A,
-//         ID_B,
-//         Some(AD_A),
-//         Some(AD_B),
-//     )
-//     .unwrap();
+    let step2 = CPace::<Hash>::step2(
+        &client.packet(),
+        "password",
+        ID_A,
+        ID_B,
+        Some(AD_A),
+        Some(AD_B),
+    )
+    .unwrap();
 
-//     let shared_keys = CPace::<Hash>::step3_stateless(
-//         &step2.packet(),
-//         &client.scalar(),
-//         &client.packet(),
-//         Some(AD_A),
-//         Some(AD_B),
-//     )
-//     .unwrap();
+    let shared_keys = CPace::<Hash>::step3_stateless(
+        client.session_id(),
+        &step2.packet(),
+        &client.scalar(),
+        &client.ycapital_a().compress().to_bytes(),
+        Some(AD_A),
+        Some(AD_B),
+    )
+    .unwrap();
 
-//     assert_eq!(shared_keys.k1, step2.shared_keys().k1);
-//     assert_eq!(shared_keys.k2, step2.shared_keys().k2);
-// }
+    assert_eq!(shared_keys.k1, step2.shared_keys().k1);
+    assert_eq!(shared_keys.k2, step2.shared_keys().k2);
+}
 
 #[test]
 fn test_calculate_generator() {
