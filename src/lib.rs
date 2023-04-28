@@ -1,4 +1,4 @@
-// #![no_std] // @nocommit
+#![no_std]
 #![forbid(unsafe_code)]
 
 pub mod util;
@@ -12,7 +12,7 @@ use curve25519_dalek::{
 use getrandom::getrandom;
 use hmac_sha512::{Hash, BYTES as SHA512_BYTES};
 use util::{
-    calc_ycapital, generator_string, prepend_len_hash, prepend_len_hash_vec, sample_scalar,
+    calc_ycapital, generator_string, sample_scalar,
     scalar_mult_vfy, AccumulatorOps,
 };
 
@@ -152,18 +152,15 @@ where
             return Err(k.unwrap_err());
         }
         let k = k.unwrap();
-        let mut gen: Vec<u8> = Vec::new();
-        let mut st = Hash::new();
-        let mut prepend_len =
-            |i: &dyn AsRef<[u8]>| prepend_len_hash_vec(&mut st, &mut gen, &i.as_ref());
-        prepend_len(&DSI_ISK);
-        prepend_len(&self.session_id);
-        prepend_len(k.compress().as_bytes());
-        prepend_len(ycapital_a.compress().as_bytes());
-        ad_a.map(|ad| prepend_len(&ad));
-        prepend_len(ycapital_b.compress().as_bytes());
-        ad_b.map(|ad| prepend_len(&ad));
-        let h = st.finalize();
+        let mut acc = A::default();
+        acc.prepend_len(&DSI_ISK);
+        acc.prepend_len(&self.session_id);
+        acc.prepend_len(k.compress().as_bytes());
+        acc.prepend_len(ycapital_a.compress().as_bytes());
+        ad_a.map(|ad| acc.prepend_len(&ad));
+        acc.prepend_len(ycapital_b.compress().as_bytes());
+        ad_b.map(|ad| acc.prepend_len(&ad));
+        let h = acc.get_hash();
         let (mut k1, mut k2) = ([0u8; SHARED_KEY_BYTES], [0u8; SHARED_KEY_BYTES]);
         k1.copy_from_slice(&h[..SHARED_KEY_BYTES]);
         k2.copy_from_slice(&h[SHARED_KEY_BYTES..]);

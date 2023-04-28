@@ -33,29 +33,8 @@ pub fn prepend_len_hash<T: AsRef<[u8]>>(hash: &mut Hash, input: &T) -> usize {
     return prepend_len_closure(&mut |i| hash.update(i), input);
 }
 
-pub fn prepend_len_vec<T: AsRef<[u8]>>(v: &mut Vec<u8>, input: &T) -> usize {
-    return prepend_len_closure(&mut |i| vec_push(v, i), input);
-}
-
 pub fn prepend_len_smallvec<T: AsRef<[u8]>>(v: &mut SmallVec<[u8; 8]>, input: &T) -> usize {
     return prepend_len_closure(&mut |i| smallvec_push(v, i), input);
-}
-
-pub fn prepend_len_hash_vec<T: AsRef<[u8]>>(hash: &mut Hash, v: &mut Vec<u8>, input: &T) -> usize {
-    prepend_len_hash(hash, input);
-    return prepend_len_vec(v, input);
-}
-
-pub fn prefix_free_cat_hash_vec<T: AsRef<[u8]>>(hash: &mut Hash, v: &mut Vec<u8>, input: &T) {
-    hash.update(input);
-    vec_push(v, input);
-}
-
-pub fn vec_push<T: AsRef<[u8]>>(v: &mut Vec<u8>, b: T) {
-    let b_ref = b.as_ref();
-    for n in 0..b_ref.len() {
-        v.push(b_ref[n]);
-    }
 }
 
 pub fn smallvec_push<T: AsRef<[u8]>>(v: &mut SmallVec<[u8; 8]>, b: T) {

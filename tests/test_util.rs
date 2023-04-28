@@ -6,7 +6,7 @@ use curve25519_dalek::{
 };
 use hmac_sha512::Hash;
 use pake_cpace::util::{
-    calc_ycapital, msg, prepend_len_hash, prepend_len_vec, scalar_mult_vfy, AccumulatorOps,
+    calc_ycapital, msg, prepend_len_closure, prepend_len_hash, scalar_mult_vfy, AccumulatorOps,
 };
 
 pub const AD_A: &str = "ADa";
@@ -72,6 +72,17 @@ fn scalar_from_bytes_mod_order_wide_hex_string(s: &str) -> Scalar {
     let mut fixed_size_input = [0u8; 32];
     fixed_size_input.copy_from_slice(&input);
     return Scalar::from_bits(fixed_size_input);
+}
+
+fn prepend_len_vec<T: AsRef<[u8]>>(v: &mut Vec<u8>, input: &T) -> usize {
+    return prepend_len_closure(&mut |i| vec_push(v, i), input);
+}
+
+pub fn vec_push<T: AsRef<[u8]>>(v: &mut Vec<u8>, b: T) {
+    let b_ref = b.as_ref();
+    for n in 0..b_ref.len() {
+        v.push(b_ref[n]);
+    }
 }
 
 pub struct DebugAcc {
