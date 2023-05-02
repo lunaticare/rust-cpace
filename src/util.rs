@@ -6,6 +6,8 @@ use smallvec::SmallVec;
 
 use crate::Error;
 
+pub type SmallVec128 = SmallVec<[u8; 8]>;
+
 pub fn prepend_len_closure<T: AsRef<[u8]>, F>(update: &mut F, input: T) -> usize
 where
     F: FnMut(&[u8]) -> (),
@@ -33,11 +35,11 @@ pub fn prepend_len_hash<T: AsRef<[u8]>>(hash: &mut Hash, input: &T) -> usize {
     return prepend_len_closure(&mut |i| hash.update(i), input);
 }
 
-pub fn prepend_len_smallvec<T: AsRef<[u8]>>(v: &mut SmallVec<[u8; 8]>, input: &T) -> usize {
+pub fn prepend_len_smallvec<T: AsRef<[u8]>>(v: &mut SmallVec128, input: &T) -> usize {
     return prepend_len_closure(&mut |i| smallvec_push(v, i), input);
 }
 
-pub fn smallvec_push<T: AsRef<[u8]>>(v: &mut SmallVec<[u8; 8]>, b: T) {
+pub fn smallvec_push<T: AsRef<[u8]>>(v: &mut SmallVec128, b: T) {
     let b_ref = b.as_ref();
     for n in 0..b_ref.len() {
         v.push(b_ref[n]);
@@ -54,7 +56,7 @@ impl PrependLen for Hash {
     }
 }
 
-impl PrependLen for SmallVec<[u8; 8]> {
+impl PrependLen for SmallVec128 {
     fn prepend_len<T: AsRef<[u8]>>(&mut self, input: &T) -> usize {
         prepend_len_smallvec(self, input)
     }
