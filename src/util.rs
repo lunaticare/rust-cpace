@@ -120,3 +120,72 @@ pub fn scalar_mult_vfy(y: &Scalar, g: &RistrettoPoint) -> Result<RistrettoPoint,
         return Err(Error::InvalidPublicKey);
     }
 }
+
+#[derive(Debug)]
+pub enum ReadLeb128Error {
+    CorruptData,
+}
+
+#[derive(Debug)]
+pub struct ReadLeb128Result {
+    pub result: SmallVec128,
+    pub new_pos: usize,
+}
+
+pub fn read_leb128_element<T: AsRef<[u8]>>(
+    input: &T,
+    start_pos: usize,
+) -> Result<ReadLeb128Result, ReadLeb128Error> {
+    let mut result = SmallVec128::new();
+    let input = input.as_ref();
+    let mut pos = start_pos;
+    // consume length
+    let mut cur_len: i32 = 0;
+    let mut read_len = false;
+    while pos < input.len() {
+        let b = input[pos];
+        pos += 1;
+        cur_len += b as i32;
+        if b > 0x7f {
+            cur_len = cur_len << 7;
+        } else {
+            read_len = true;
+            break;
+        }
+    }
+    if !read_len {
+        return Err(ReadLeb128Error::CorruptData);
+    }
+    // consume data
+    for i in 0..cur_len {
+        if pos < input.len() {
+            result.push(input[pos]);
+            pos += 1;
+        } else {
+            return Err(ReadLeb128Error::CorruptData);
+        }
+    }
+    Ok(ReadLeb128Result {
+        result,
+        new_pos: pos,
+    })
+}
+
+pub fn read_leb128_buffer<T: AsRef<[u8]>>(input: &T) -> SmallVec<[SmallVec128; 8]> {
+    let mut result = SmallVec::<[SmallVec128; 8]>::new();
+    let input = input.as_ref();
+    let mut pos = 0;
+    while pos < input.len() {
+        let read_result = read_leb128_element(&input, pos);
+        match read_result {
+            Ok(s) => {
+                result.push(s.result);
+                pos = s.new_pos;
+            }
+            Err(_) => {
+                break;
+            }
+        }
+    }
+    result
+}

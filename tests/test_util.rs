@@ -6,8 +6,8 @@ use curve25519_dalek::{
 };
 use hmac_sha512::Hash;
 use pake_cpace::util::{
-    calc_ycapital, channel_identifier, msg, prepend_len_closure, prepend_len_hash, scalar_mult_vfy,
-    GetHash, PrependLen,
+    calc_ycapital, channel_identifier, msg, prepend_len_closure, prepend_len_hash,
+    read_leb128_buffer, scalar_mult_vfy, GetHash, PrependLen,
 };
 
 pub const ID_A: &str = "Ainitiator";
@@ -210,4 +210,12 @@ fn test_scalar_mult_vfy_2() {
 fn test_channel_identifier() {
     let ci = channel_identifier(&ID_A, &ID_B);
     assert_eq!(&ci.as_slice(), &CI.as_bytes());
+}
+
+#[test]
+fn test_read_leb128_buffer_1() {
+    let actual = read_leb128_buffer(&CI);
+    assert_eq!(actual.len(), 2);
+    assert_eq!(actual[0].as_slice(), ID_A.as_bytes());
+    assert_eq!(actual[1].as_slice(), ID_B.as_bytes());
 }
