@@ -24,21 +24,11 @@ fn isk() -> String {
 
 #[test]
 fn test_cpace() {
-    let client = CPace::<Hash>::step1("password", ID_A, ID_B, Some("ad")).unwrap();
+    let client = CPace::<Hash>::step1("password", ID_A, ID_B, &AD_A).unwrap();
 
-    let step2 = CPace::<Hash>::step2(
-        &client.packet(),
-        "password",
-        ID_A,
-        ID_B,
-        Some(AD_A),
-        Some(AD_B),
-    )
-    .unwrap();
+    let step2 = CPace::<Hash>::step2(&client.packet(), "password", ID_A, ID_B, &AD_B).unwrap();
 
-    let shared_keys = client
-        .step3(&step2.packet(), Some(AD_A), Some(AD_B))
-        .unwrap();
+    let shared_keys = client.step3(&step2.packet(), &AD_A).unwrap();
 
     assert_eq!(shared_keys.k1, step2.shared_keys().k1);
     assert_eq!(shared_keys.k2, step2.shared_keys().k2);
@@ -46,25 +36,16 @@ fn test_cpace() {
 
 #[test]
 fn test_cpace_step3_stateless() {
-    let client = CPace::<Hash>::step1("password", ID_A, ID_B, Some("ad")).unwrap();
+    let client = CPace::<Hash>::step1("password", ID_A, ID_B, &AD_A).unwrap();
 
-    let step2 = CPace::<Hash>::step2(
-        &client.packet(),
-        "password",
-        ID_A,
-        ID_B,
-        Some(AD_A),
-        Some(AD_B),
-    )
-    .unwrap();
+    let step2 = CPace::<Hash>::step2(&client.packet(), "password", ID_A, ID_B, &AD_B).unwrap();
 
     let shared_keys = CPace::<Hash>::step3_stateless(
         client.session_id(),
         &step2.packet(),
         &client.scalar(),
         &client.ycapital_a().compress().to_bytes(),
-        Some(AD_A),
-        Some(AD_B),
+        &AD_A,
     )
     .unwrap();
 
@@ -138,23 +119,44 @@ fn test_decode_compressed_ristretto_point_from_test_case() {
 }
 
 #[test]
-fn test_isk_calculation_initiator_responder() {
+fn test_isk_calculation_initiator_responder_stateful() {
     let step1 =
-        CPace::<DebugAcc>::step1_debug(PASSWORD, ID_A, ID_B, None::<&str>, SESSION_ID, &mut || {
-            Ok(y_a())
+        CPace::<DebugAcc>::step1_debug(PASSWORD, ID_A, ID_B, &AD_A, SESSION_ID, &mut || Ok(y_a()))
+            .unwrap();
+
+    assert_eq!(
+        hex::encode(step1.packet()),
+        String::from_iter([
+            "10",                               /* len(session_id) */
+            "7e4b4791d6a8ef019b936c79fb7f2c57", /* session_id */
+            "20",                               /* len(MSGa) */
+            "383a85dd236978f17f8c8545b50dabc5", /* MSGa */
+            "2a39fcdab2cf8bc531ce040ff77ca82d", /* MSGa */
+            "03",                               /* len(ADa) */
+            "414461",                           /* ADa */
+            "00000000000000000000000000",       /* unused space */
+        ])
+    );
+
+    let step2 =
+        CPace::<DebugAcc>::step2_debug(&step1.packet(), PASSWORD, ID_A, ID_B, &AD_B, &mut || {
+            Ok(y_b())
         })
         .unwrap();
-    let step2 = CPace::<DebugAcc>::step2_debug(
-        &step1.packet(),
-        PASSWORD,
-        ID_A,
-        ID_B,
-        Some(AD_A),
-        Some(AD_B),
-        &mut || Ok(y_b()),
-    )
-    .unwrap();
-    let step3 = step1.step3(&step2.packet(), Some(AD_A), Some(AD_B));
+
+    assert_eq!(
+        hex::encode(step2.packet()),
+        String::from_iter([
+            "20",                               /* len(MSGb) */
+            "a6206309c0e8e5f579295e35997ac430", /* MSGb */
+            "0ab3fecec3c17f7b604f3e698fa1383c", /* MSGb */
+            "03",                               /* len(ADb) */
+            "414462",                           /* ADb */
+            "00000000000000000000000000",       /* unused space */
+        ])
+    );
+
+    let step3 = step1.step3(&step2.packet(), &AD_A);
     let shared_keys = step3.unwrap();
 
     assert_eq!(shared_keys.k1, step2.shared_keys().k1);
@@ -169,29 +171,21 @@ fn test_isk_calculation_initiator_responder() {
 #[test]
 fn test_isk_calculation_initiator_responder_step3_stateless() {
     let client =
-        CPace::<Hash>::step1_debug(PASSWORD, ID_A, ID_B, None::<&str>, SESSION_ID, &mut || {
-            Ok(y_a())
+        CPace::<Hash>::step1_debug(PASSWORD, ID_A, ID_B, &AD_A, SESSION_ID, &mut || Ok(y_a()))
+            .unwrap();
+
+    let step2 =
+        CPace::<Hash>::step2_debug(&client.packet(), PASSWORD, ID_A, ID_B, &AD_B, &mut || {
+            Ok(y_b())
         })
         .unwrap();
-
-    let step2 = CPace::<Hash>::step2_debug(
-        &client.packet(),
-        PASSWORD,
-        ID_A,
-        ID_B,
-        Some(AD_A),
-        Some(AD_B),
-        &mut || Ok(y_b()),
-    )
-    .unwrap();
 
     let shared_keys = CPace::<Hash>::step3_stateless(
         client.session_id(),
         &step2.packet(),
         &client.scalar(),
         &client.ycapital_a().compress().to_bytes(),
-        Some(AD_A),
-        Some(AD_B),
+        &AD_A,
     )
     .unwrap();
 

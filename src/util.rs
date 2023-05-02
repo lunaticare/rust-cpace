@@ -124,6 +124,7 @@ pub fn scalar_mult_vfy(y: &Scalar, g: &RistrettoPoint) -> Result<RistrettoPoint,
 #[derive(Debug)]
 pub enum ReadLeb128Error {
     CorruptData,
+    NoDataToRead,
 }
 
 #[derive(Debug)]
@@ -155,6 +156,9 @@ pub fn read_leb128_element<T: AsRef<[u8]>>(
     }
     if !read_len {
         return Err(ReadLeb128Error::CorruptData);
+    }
+    if cur_len == 0 {
+        return Err(ReadLeb128Error::NoDataToRead);
     }
     // consume data
     for i in 0..cur_len {

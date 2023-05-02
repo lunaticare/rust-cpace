@@ -12,13 +12,22 @@ use curve25519_dalek::{
 use getrandom::getrandom;
 use hmac_sha512::BYTES as SHA512_BYTES;
 use util::{
-    calc_ycapital, channel_identifier, generator_string, sample_scalar, scalar_mult_vfy, GetHash,
-    PrependLen,
+    calc_ycapital, channel_identifier, generator_string, read_leb128_buffer, sample_scalar,
+    scalar_mult_vfy, GetHash, PrependLen, SmallVec128,
 };
 
 pub const SESSION_ID_BYTES: usize = 16;
-pub const STEP1_PACKET_BYTES: usize = 16 + 32;
-pub const STEP2_PACKET_BYTES: usize = 32;
+
+/* Maximum size for additional data (ADa, ADb), in bytes */
+pub const AD_MAX_BYTES: usize = 16;
+/* MSGa size */
+pub const STEP1_MESSAGE_BYTES: usize = 32;
+/* Step 1 packet = network_encode(sid, MSGa, ADa) = lv_cat(sid, MSGa, ADa) */
+pub const STEP1_PACKET_BYTES: usize =
+    (SESSION_ID_BYTES + 1) + (STEP1_MESSAGE_BYTES + 1) + (AD_MAX_BYTES + 1);
+pub const STEP2_MESSAGE_BYTES: usize = 32;
+/* Step 2 packet = network_encode(MSGb, ADb) = lv_cat(MSGb, ADb) */
+pub const STEP2_PACKET_BYTES: usize = (STEP2_MESSAGE_BYTES + 1) + (AD_MAX_BYTES + 1);
 pub const SHARED_KEY_BYTES: usize = 32;
 pub const EC_SCALAR_BYTES: usize = 32;
 
@@ -30,6 +39,7 @@ pub enum Error {
     Overflow(&'static str),
     Random(getrandom::Error),
     InvalidPublicKey,
+    CorruptData,
 }
 
 impl fmt::Display for Error {
@@ -87,10 +97,9 @@ where
     pub fn step3<T: AsRef<[u8]>>(
         &self,
         step2_packet: &[u8; STEP2_PACKET_BYTES],
-        ad_a: Option<T>,
-        ad_b: Option<T>,
+        ad_a: &T,
     ) -> Result<SharedKeys, Error> {
-        self.ctx.step3(step2_packet, ad_a, ad_b)
+        self.ctx.step3(step2_packet, ad_a)
     }
 }
 
@@ -148,8 +157,13 @@ where
         let mut p = RistrettoPoint::from_uniform_bytes(&h);
         let r = rsg()?;
         p = calc_ycapital(&r, &p);
+        let mut session_id_buf = [0u8; SESSION_ID_BYTES];
+        if session_id.len() != SESSION_ID_BYTES {
+            return Err(Error::CorruptData);
+        }
+        session_id_buf[..SESSION_ID_BYTES].copy_from_slice(&session_id[..SESSION_ID_BYTES]);
         Ok(CPace {
-            session_id,
+            session_id: session_id_buf,
             p,
             r,
             h,
@@ -162,8 +176,8 @@ where
         op: RistrettoPoint,
         ycapital_a: RistrettoPoint,
         ycapital_b: RistrettoPoint,
-        ad_a: Option<T>,
-        ad_b: Option<T>,
+        ad_a: &T,
+        ad_b: &T,
     ) -> Result<SharedKeys, Error> {
         if op.is_identity() {
             return Err(Error::InvalidPublicKey);
@@ -178,9 +192,9 @@ where
         acc.prepend_len(&self.session_id);
         acc.prepend_len(k.compress().as_bytes());
         acc.prepend_len(ycapital_a.compress().as_bytes());
-        ad_a.map(|ad| acc.prepend_len(&ad));
+        acc.prepend_len(&ad_a);
         acc.prepend_len(ycapital_b.compress().as_bytes());
-        ad_b.map(|ad| acc.prepend_len(&ad));
+        acc.prepend_len(&ad_b);
         let h = acc.get_hash();
         let (mut k1, mut k2) = ([0u8; SHARED_KEY_BYTES], [0u8; SHARED_KEY_BYTES]);
         k1.copy_from_slice(&h[..SHARED_KEY_BYTES]);
@@ -192,7 +206,7 @@ where
         password: &str,
         id_a: &str,
         id_b: &str,
-        ad: Option<T>,
+        ad: &T,
     ) -> Result<Step1Out<A>, Error> {
         let mut session_id = [0u8; SESSION_ID_BYTES];
         getrandom(&mut session_id)?;
@@ -205,7 +219,7 @@ where
         password: &str,
         id_a: &str,
         id_b: &str,
-        ad: Option<T>,
+        ad_a: &T,
         session_id: [u8; SESSION_ID_BYTES],
         rsg: &mut RandomScalarGenerator,
     ) -> Result<Step1Out<A>, Error>
@@ -213,9 +227,13 @@ where
         RandomScalarGenerator: FnMut() -> Result<Scalar, getrandom::Error>,
     {
         let ctx = CPace::new(session_id, password, id_a, id_b, DSI, rsg)?;
+        let mut step1_packet_vec = SmallVec128::new();
+        step1_packet_vec.prepend_len(&session_id);
+        step1_packet_vec.prepend_len(&ctx.p.compress().as_bytes());
+        step1_packet_vec.prepend_len(&ad_a);
+
         let mut step1_packet = [0u8; STEP1_PACKET_BYTES];
-        step1_packet[..SESSION_ID_BYTES].copy_from_slice(&ctx.session_id);
-        step1_packet[SESSION_ID_BYTES..].copy_from_slice(ctx.p.compress().as_bytes());
+        step1_packet[..step1_packet_vec.len()].copy_from_slice(&step1_packet_vec.as_slice());
         Ok(Step1Out { ctx, step1_packet })
     }
 
@@ -224,18 +242,11 @@ where
         password: &str,
         id_a: &str,
         id_b: &str,
-        ad_a: Option<T>,
-        ad_b: Option<T>,
+        ad_b: &T,
     ) -> Result<Step2Out, Error> {
-        return CPace::<A>::step2_debug(
-            step1_packet,
-            password,
-            id_a,
-            id_b,
-            ad_a,
-            ad_b,
-            &mut || sample_scalar(),
-        );
+        return CPace::<A>::step2_debug(step1_packet, password, id_a, id_b, ad_b, &mut || {
+            sample_scalar()
+        });
     }
 
     pub fn step2_debug<T: AsRef<[u8]>, RandomScalarGenerator>(
@@ -243,24 +254,35 @@ where
         password: &str,
         id_a: &str,
         id_b: &str,
-        ad_a: Option<T>,
-        ad_b: Option<T>,
+        ad_b: &T,
         rsg: &mut RandomScalarGenerator,
     ) -> Result<Step2Out, Error>
     where
         RandomScalarGenerator: FnMut() -> Result<Scalar, getrandom::Error>,
     {
-        // TODO validate step1_packet (correct length encodings)
+        let step1_packet_parts = read_leb128_buffer(step1_packet);
+        if step1_packet_parts.len() != 3 {
+            return Err(Error::CorruptData);
+        }
+        let session_id_vec = &step1_packet_parts[0];
+        if session_id_vec.len() != SESSION_ID_BYTES {
+            return Err(Error::CorruptData);
+        }
         let mut session_id = [0u8; SESSION_ID_BYTES];
-        session_id.copy_from_slice(&step1_packet[..SESSION_ID_BYTES]);
-        let ya = &step1_packet[SESSION_ID_BYTES..];
+        session_id[..SESSION_ID_BYTES].copy_from_slice(&session_id_vec[..SESSION_ID_BYTES]);
+        let ya = step1_packet_parts[1].as_slice();
+        let ad_a = &step1_packet_parts[2];
         let ctx = CPace::<A>::new(session_id, password, id_a, id_b, DSI, rsg)?;
+        let mut step2_packet_vec = SmallVec128::new();
+        step2_packet_vec.prepend_len(&ctx.p.compress().as_bytes());
+        step2_packet_vec.prepend_len(&ad_b);
+
         let mut step2_packet = [0u8; STEP2_PACKET_BYTES];
-        step2_packet.copy_from_slice(ctx.p.compress().as_bytes());
+        step2_packet[..step2_packet_vec.len()].copy_from_slice(&step2_packet_vec.as_slice());
         let ya = CompressedRistretto::from_slice(ya)
             .decompress()
             .ok_or(Error::InvalidPublicKey)?;
-        let shared_keys = ctx.finalize(ya, ya, ctx.p, ad_a, ad_b)?;
+        let shared_keys = ctx.finalize(ya, ya, ctx.p, &ad_a.as_ref(), &ad_b.as_ref())?;
         Ok(Step2Out {
             shared_keys,
             step2_packet,
@@ -270,27 +292,40 @@ where
     pub fn step3<T: AsRef<[u8]>>(
         &self,
         step2_packet: &[u8; STEP2_PACKET_BYTES],
-        ad_a: Option<T>,
-        ad_b: Option<T>,
+        ad_a: &T,
     ) -> Result<SharedKeys, Error> {
-        let yb = CompressedRistretto::from_slice(step2_packet)
+        let step2_packet_parts = read_leb128_buffer(step2_packet);
+        if step2_packet_parts.len() != 2 {
+            return Err(Error::CorruptData);
+        }
+        let yb_bytes = step2_packet_parts[0].as_slice();
+        let ad_b = &step2_packet_parts[1];
+
+        let yb = CompressedRistretto::from_slice(yb_bytes)
             .decompress()
             .ok_or(Error::InvalidPublicKey)?;
-        self.finalize(yb, self.p, yb, ad_a, ad_b)
+        self.finalize(yb, self.p, yb, &ad_a.as_ref(), &ad_b.as_ref())
     }
 
     pub fn step3_stateless<T: AsRef<[u8]>>(
         session_id: [u8; SESSION_ID_BYTES],
         step2_packet: &[u8; STEP2_PACKET_BYTES],
         scalar: &[u8; EC_SCALAR_BYTES],
-        ya_bytes: &[u8; STEP2_PACKET_BYTES],
-        ad_a: Option<T>,
-        ad_b: Option<T>,
+        ya_bytes: &[u8; STEP1_MESSAGE_BYTES],
+        ad_a: &T,
     ) -> Result<SharedKeys, Error> {
         let ya = CompressedRistretto::from_slice(ya_bytes)
             .decompress()
             .ok_or(Error::InvalidPublicKey)?;
-        let yb = CompressedRistretto::from_slice(step2_packet)
+
+        let step2_packet_parts = read_leb128_buffer(step2_packet);
+        if step2_packet_parts.len() != 2 {
+            return Err(Error::CorruptData);
+        }
+        let yb_bytes = step2_packet_parts[0].as_slice();
+        let ad_b = &step2_packet_parts[1];
+
+        let yb = CompressedRistretto::from_slice(yb_bytes)
             .decompress()
             .ok_or(Error::InvalidPublicKey)?;
         let r = Scalar::from_bytes_mod_order(*scalar);
@@ -301,6 +336,6 @@ where
             h: [0u8; 64],
             acc: A::default(),
         };
-        ctx.finalize(yb, ya, yb, ad_a, ad_b)
+        ctx.finalize(yb, ya, yb, &ad_a.as_ref(), &ad_b.as_ref())
     }
 }
