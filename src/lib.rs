@@ -10,6 +10,7 @@ use curve25519_dalek::{
     traits::IsIdentity,
 };
 use getrandom::getrandom;
+use hmac_sha512::Hash;
 use hmac_sha512::BYTES as SHA512_BYTES;
 use util::{
     calc_ycapital, channel_identifier, generator_string, read_leb128_buffer, sample_scalar,
@@ -61,7 +62,7 @@ pub struct SharedKeys {
 }
 
 #[derive(Debug, Clone)]
-pub struct CPace<A> {
+pub struct CPaceDebug<A> {
     pub session_id: [u8; SESSION_ID_BYTES],
     pub p: RistrettoPoint,
     pub r: Scalar,
@@ -69,15 +70,61 @@ pub struct CPace<A> {
     pub acc: A,
 }
 
-pub struct Step1Out<A> {
-    ctx: CPace<A>,
+#[derive(Debug, Clone)]
+pub struct CPace {
+    pub session_id: [u8; SESSION_ID_BYTES],
+    pub p: RistrettoPoint,
+    pub r: Scalar,
+    pub h: [u8; SHA512_BYTES],
+}
+
+pub struct Step1OutDebug<A> {
+    ctx: CPaceDebug<A>,
     step1_packet: [u8; STEP1_PACKET_BYTES],
 }
 
-impl<A> Step1Out<A>
+pub struct Step1Out {
+    ctx: CPace,
+    step1_packet: [u8; STEP1_PACKET_BYTES],
+}
+
+impl<A> Step1OutDebug<A>
 where
     A: PrependLen + GetHash + Default,
 {
+    pub fn session_id(&self) -> [u8; SESSION_ID_BYTES] {
+        self.ctx.session_id
+    }
+
+    pub fn packet(&self) -> [u8; STEP1_PACKET_BYTES] {
+        self.step1_packet
+    }
+
+    pub fn scalar(&self) -> [u8; EC_SCALAR_BYTES] {
+        self.ctx.r.to_bytes()
+    }
+
+    pub fn ycapital_a(&self) -> RistrettoPoint {
+        self.ctx.p
+    }
+
+    pub fn step3<T: AsRef<[u8]>>(
+        &self,
+        step2_packet: &[u8; STEP2_PACKET_BYTES],
+        ad_a: &T,
+    ) -> Result<SharedKeys, Error> {
+        self.ctx.step3(step2_packet, ad_a)
+    }
+
+    pub fn to_step1_out(&self) -> Step1Out {
+        Step1Out {
+            ctx: self.ctx.to_cpace(),
+            step1_packet: self.step1_packet,
+        }
+    }
+}
+
+impl Step1Out {
     pub fn session_id(&self) -> [u8; SESSION_ID_BYTES] {
         self.ctx.session_id
     }
@@ -118,7 +165,7 @@ impl Step2Out {
     }
 }
 
-impl<A> CPace<A>
+impl<A> CPaceDebug<A>
 where
     A: PrependLen + GetHash + Default,
 {
@@ -162,7 +209,7 @@ where
             return Err(Error::CorruptData);
         }
         session_id_buf[..SESSION_ID_BYTES].copy_from_slice(&session_id[..SESSION_ID_BYTES]);
-        Ok(CPace {
+        Ok(CPaceDebug {
             session_id: session_id_buf,
             p,
             r,
@@ -202,31 +249,27 @@ where
         Ok(SharedKeys { k1, k2 })
     }
 
-    pub fn step1<T: AsRef<[u8]>>(
-        password: &str,
-        id_a: &str,
-        id_b: &str,
-        ad: &T,
-    ) -> Result<Step1Out<A>, Error> {
-        let mut session_id = [0u8; SESSION_ID_BYTES];
-        getrandom(&mut session_id)?;
-        return CPace::step1_debug(password, id_a, id_b, ad, session_id, &mut || {
-            sample_scalar()
-        });
+    pub fn to_cpace(&self) -> CPace {
+        CPace {
+            session_id: self.session_id,
+            p: self.p,
+            r: self.r,
+            h: self.h,
+        }
     }
 
-    pub fn step1_debug<T: AsRef<[u8]>, RandomScalarGenerator>(
+    pub fn step1<T: AsRef<[u8]>, RandomScalarGenerator>(
         password: &str,
         id_a: &str,
         id_b: &str,
         ad_a: &T,
         session_id: [u8; SESSION_ID_BYTES],
         rsg: &mut RandomScalarGenerator,
-    ) -> Result<Step1Out<A>, Error>
+    ) -> Result<Step1OutDebug<A>, Error>
     where
         RandomScalarGenerator: FnMut() -> Result<Scalar, getrandom::Error>,
     {
-        let ctx = CPace::new(session_id, password, id_a, id_b, DSI, rsg)?;
+        let ctx = CPaceDebug::new(session_id, password, id_a, id_b, DSI, rsg)?;
         let mut step1_packet_vec = SmallVec128::new();
         step1_packet_vec.prepend_len(&session_id);
         step1_packet_vec.prepend_len(&ctx.p.compress().as_bytes());
@@ -234,22 +277,10 @@ where
 
         let mut step1_packet = [0u8; STEP1_PACKET_BYTES];
         step1_packet[..step1_packet_vec.len()].copy_from_slice(&step1_packet_vec.as_slice());
-        Ok(Step1Out { ctx, step1_packet })
+        Ok(Step1OutDebug { ctx, step1_packet })
     }
 
-    pub fn step2<T: AsRef<[u8]>>(
-        step1_packet: &[u8; STEP1_PACKET_BYTES],
-        password: &str,
-        id_a: &str,
-        id_b: &str,
-        ad_b: &T,
-    ) -> Result<Step2Out, Error> {
-        return CPace::<A>::step2_debug(step1_packet, password, id_a, id_b, ad_b, &mut || {
-            sample_scalar()
-        });
-    }
-
-    pub fn step2_debug<T: AsRef<[u8]>, RandomScalarGenerator>(
+    pub fn step2<T: AsRef<[u8]>, RandomScalarGenerator>(
         step1_packet: &[u8; STEP1_PACKET_BYTES],
         password: &str,
         id_a: &str,
@@ -272,7 +303,7 @@ where
         session_id[..SESSION_ID_BYTES].copy_from_slice(&session_id_vec[..SESSION_ID_BYTES]);
         let ya = step1_packet_parts[1].as_slice();
         let ad_a = &step1_packet_parts[2];
-        let ctx = CPace::<A>::new(session_id, password, id_a, id_b, DSI, rsg)?;
+        let ctx = CPaceDebug::<A>::new(session_id, password, id_a, id_b, DSI, rsg)?;
         let mut step2_packet_vec = SmallVec128::new();
         step2_packet_vec.prepend_len(&ctx.p.compress().as_bytes());
         step2_packet_vec.prepend_len(&ad_b);
@@ -306,6 +337,50 @@ where
             .ok_or(Error::InvalidPublicKey)?;
         self.finalize(yb, self.p, yb, &ad_a.as_ref(), &ad_b.as_ref())
     }
+}
+
+impl CPace {
+    pub fn step1<T: AsRef<[u8]>>(
+        password: &str,
+        id_a: &str,
+        id_b: &str,
+        ad: &T,
+    ) -> Result<Step1Out, Error> {
+        let mut session_id = [0u8; SESSION_ID_BYTES];
+        getrandom(&mut session_id)?;
+        let step1_result =
+            CPaceDebug::<Hash>::step1(password, id_a, id_b, ad, session_id, &mut || {
+                sample_scalar()
+            });
+        step1_result.map(|op| op.to_step1_out())
+    }
+
+    pub fn step2<T: AsRef<[u8]>>(
+        step1_packet: &[u8; STEP1_PACKET_BYTES],
+        password: &str,
+        id_a: &str,
+        id_b: &str,
+        ad_b: &T,
+    ) -> Result<Step2Out, Error> {
+        return CPaceDebug::<Hash>::step2(step1_packet, password, id_a, id_b, ad_b, &mut || {
+            sample_scalar()
+        });
+    }
+
+    pub fn step3<T: AsRef<[u8]>>(
+        &self,
+        step2_packet: &[u8; STEP2_PACKET_BYTES],
+        ad_a: &T,
+    ) -> Result<SharedKeys, Error> {
+        let ctx_debug = CPaceDebug::<Hash> {
+            session_id: self.session_id,
+            p: self.p,
+            r: self.r,
+            h: self.h,
+            acc: Hash::new(),
+        };
+        ctx_debug.step3(step2_packet, ad_a)
+    }
 
     pub fn step3_stateless<T: AsRef<[u8]>>(
         session_id: [u8; SESSION_ID_BYTES],
@@ -329,12 +404,12 @@ where
             .decompress()
             .ok_or(Error::InvalidPublicKey)?;
         let r = Scalar::from_bytes_mod_order(*scalar);
-        let ctx = CPace {
+        let ctx = CPaceDebug {
             session_id: session_id,
             p: ya,
             r,
             h: [0u8; 64],
-            acc: A::default(),
+            acc: Hash::new(),
         };
         ctx.finalize(yb, ya, yb, &ad_a.as_ref(), &ad_b.as_ref())
     }

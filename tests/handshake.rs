@@ -1,7 +1,7 @@
 use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use hex;
 use hmac_sha512::Hash;
-use pake_cpace::{CPace, DSI};
+use pake_cpace::{CPace, CPaceDebug, DSI};
 use std::{iter::FromIterator, str};
 
 mod test_util;
@@ -24,9 +24,9 @@ fn isk() -> String {
 
 #[test]
 fn test_cpace() {
-    let client = CPace::<Hash>::step1("password", ID_A, ID_B, &AD_A).unwrap();
+    let client = CPace::step1("password", ID_A, ID_B, &AD_A).unwrap();
 
-    let step2 = CPace::<Hash>::step2(&client.packet(), "password", ID_A, ID_B, &AD_B).unwrap();
+    let step2 = CPace::step2(&client.packet(), "password", ID_A, ID_B, &AD_B).unwrap();
 
     let shared_keys = client.step3(&step2.packet(), &AD_A).unwrap();
 
@@ -36,11 +36,11 @@ fn test_cpace() {
 
 #[test]
 fn test_cpace_step3_stateless() {
-    let client = CPace::<Hash>::step1("password", ID_A, ID_B, &AD_A).unwrap();
+    let client = CPace::step1("password", ID_A, ID_B, &AD_A).unwrap();
 
-    let step2 = CPace::<Hash>::step2(&client.packet(), "password", ID_A, ID_B, &AD_B).unwrap();
+    let step2 = CPace::step2(&client.packet(), "password", ID_A, ID_B, &AD_B).unwrap();
 
-    let shared_keys = CPace::<Hash>::step3_stateless(
+    let shared_keys = CPace::step3_stateless(
         client.session_id(),
         &step2.packet(),
         &client.scalar(),
@@ -56,7 +56,8 @@ fn test_cpace_step3_stateless() {
 #[test]
 fn test_calculate_generator() {
     let result =
-        CPace::<DebugAcc>::new(SESSION_ID, PASSWORD, ID_A, ID_B, DSI, &mut || Ok(y_a())).unwrap();
+        CPaceDebug::<DebugAcc>::new(SESSION_ID, PASSWORD, ID_A, ID_B, DSI, &mut || Ok(y_a()))
+            .unwrap();
     assert_eq!(
         hex::encode(result.acc.v.as_slice()),
         String::from_iter([
@@ -121,7 +122,7 @@ fn test_decode_compressed_ristretto_point_from_test_case() {
 #[test]
 fn test_isk_calculation_initiator_responder_stateful() {
     let step1 =
-        CPace::<DebugAcc>::step1_debug(PASSWORD, ID_A, ID_B, &AD_A, SESSION_ID, &mut || Ok(y_a()))
+        CPaceDebug::<DebugAcc>::step1(PASSWORD, ID_A, ID_B, &AD_A, SESSION_ID, &mut || Ok(y_a()))
             .unwrap();
 
     assert_eq!(
@@ -139,7 +140,7 @@ fn test_isk_calculation_initiator_responder_stateful() {
     );
 
     let step2 =
-        CPace::<DebugAcc>::step2_debug(&step1.packet(), PASSWORD, ID_A, ID_B, &AD_B, &mut || {
+        CPaceDebug::<DebugAcc>::step2(&step1.packet(), PASSWORD, ID_A, ID_B, &AD_B, &mut || {
             Ok(y_b())
         })
         .unwrap();
@@ -171,16 +172,16 @@ fn test_isk_calculation_initiator_responder_stateful() {
 #[test]
 fn test_isk_calculation_initiator_responder_step3_stateless() {
     let client =
-        CPace::<Hash>::step1_debug(PASSWORD, ID_A, ID_B, &AD_A, SESSION_ID, &mut || Ok(y_a()))
+        CPaceDebug::<Hash>::step1(PASSWORD, ID_A, ID_B, &AD_A, SESSION_ID, &mut || Ok(y_a()))
             .unwrap();
 
     let step2 =
-        CPace::<Hash>::step2_debug(&client.packet(), PASSWORD, ID_A, ID_B, &AD_B, &mut || {
+        CPaceDebug::<Hash>::step2(&client.packet(), PASSWORD, ID_A, ID_B, &AD_B, &mut || {
             Ok(y_b())
         })
         .unwrap();
 
-    let shared_keys = CPace::<Hash>::step3_stateless(
+    let shared_keys = CPace::step3_stateless(
         client.session_id(),
         &step2.packet(),
         &client.scalar(),
